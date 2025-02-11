@@ -1,11 +1,10 @@
-
-## Generates synthetic data for linear, logistic, poisson and gamma models, then fits stan model for each and gives results. 
+## Generates synthetic data for linear, logistic, poisson and gamma models, then fits stan model for each and gives results.
 ## Note that results directly from stan model are not usable as they may have labels switched. instead we post-process them first and compute posterior means, variances and confidence limits manually
 
 
-rm(list=ls())
+rm(list = ls())
 # For reproducibility
-set.seed(123) 
+set.seed(123)
 
 
 # LINEAR
@@ -13,22 +12,22 @@ set.seed(123)
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlinear.stan')
+stanDso <- rstan::stan_model(file = "C:\\Users\\jenni\\Links-Mixture-Modeling\\gtlinear.stan")
 
 # Parameters
-N <- 200                # Number of observations
-K <- 2                  # Number of predictors including intercept
-theta <- 0.8           # Proportion of observations that are true links
-beta1 <- c(1, 2)     # Regression coefficients for true links
-beta2 <- c(3, 4)    # Regression coefficients for false links
-sigma1 <- 1             # Standard deviation for the true links
-sigma2 <- 2             # Standard deviation for the false links
+N <- 200 # Number of observations
+K <- 2 # Number of predictors including intercept
+theta <- 0.8 # Proportion of observations that are true links
+beta1 <- c(1, 2) # Regression coefficients for true links
+beta2 <- c(3, 4) # Regression coefficients for false links
+sigma1 <- 1 # Standard deviation for the true links
+sigma2 <- 2 # Standard deviation for the false links
 
 # Simulate predictor matrix
-X <- cbind(1, runif(N, -2, 2))  # Intercept and a single predictor
+X <- cbind(1, runif(N, -2, 2)) # Intercept and a single predictor
 
 # Simulate mixture memberships
-z <- rbinom(N, size = 1, prob = theta) + 1 #true link (z=1) or false link (z=2)
+z <- rbinom(N, size = 1, prob = theta) + 1 # true link (z=1) or false link (z=2)
 z <- ifelse(z == 1, 0, 1)
 
 # Simulate outcomes
@@ -44,53 +43,52 @@ for (i in 1:N) {
 
 # Prepare data for Stan
 stan_data <- list(
-  N = N,       # Number of observations
-  K = K,                # Number of predictors
+  N = N, # Number of observations
+  K = K, # Number of predictors
   X = X, # Predictor matrix
-  y = y            # Outcome vector
+  y = y # Outcome vector
 )
 
 
 # Fit the model
-fit <- sampling(stanDso, data = stan_data, iter = 1e4,chains = 1,seed = 123)
+fit <- sampling(stanDso, data = stan_data, iter = 1e4, chains = 1, seed = 123)
 
 # Print summary of results from stan fit; but cant use as may have switched labels. instead post-process first and compute results manually
-#print(fit, pars = c("theta", "mu1", "mu2", "sigma1", "sigma2", "beta1", "beta2"))
+# print(fit, pars = c("theta", "mu1", "mu2", "sigma1", "sigma2", "beta1", "beta2"))
 
 # Extract posterior
 posterior <- extract(fit)
 
 # Extract membership samples
-z_samples = posterior$z
+z_samples <- posterior$z
 
 # Extract beta samples
-beta1.p = posterior$beta1
-beta2.p = posterior$beta2
+beta1.p <- posterior$beta1
+beta2.p <- posterior$beta2
 
 # Post process beta samples
 for (i in 1:nrow(z_samples)) {
-  
   # Relabel
-  z_samples[i, ] <- ifelse(z_samples[i,] == 1, 0, 1)
-  
-  if (mean(z_samples[i,]) < 0.5) {  # Check if label 1 is less dominant
+  z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
+
+  if (mean(z_samples[i, ]) < 0.5) { # Check if label 1 is less dominant
     # Swap labels in z is not
-    z_samples[i,] <- 1 - z_samples[i, ]
-    
+    z_samples[i, ] <- 1 - z_samples[i, ]
+
     # Swap coefficients for beta
-    temp <- beta1.p[i,]
+    temp <- beta1.p[i, ]
     beta1.p[i, ] <- beta2.p[i, ]
-    beta2.p[i, ] <- temp 
+    beta2.p[i, ] <- temp
   }
 }
 
 # Compute posterior mean, variance and confidence limits for coefficent in each mixture component
-mean_beta1 <- apply(beta1.p,2,mean)
-mean_beta2 <- apply(beta2.p,2,mean)
-var_beta1 <- apply(beta1.p,2,var)
-var_beta2 <- apply(beta2.p,2,var)
-ci_beta1 <- apply(beta1.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
-ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
+mean_beta1 <- apply(beta1.p, 2, mean)
+mean_beta2 <- apply(beta2.p, 2, mean)
+var_beta1 <- apply(beta1.p, 2, var)
+var_beta2 <- apply(beta2.p, 2, var)
+ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
 
 
 
@@ -99,17 +97,17 @@ ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlogistic.stan')
+stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlogistic.stan")
 
 
 # Data
 # Simulate a dataset
 set.seed(123)
-N <- 200                  # Number of observations
-K <- 2                    # Number of predictors
-theta <- 0.6              # Proportion of component 1
-beta1 <- c(0.5, -1)         # Coefficients for component 1
-beta2 <- c(0.8, 1)         # Coefficients for component 2
+N <- 200 # Number of observations
+K <- 2 # Number of predictors
+theta <- 0.6 # Proportion of component 1
+beta1 <- c(0.5, -1) # Coefficients for component 1
+beta2 <- c(0.8, 1) # Coefficients for component 2
 
 # Generate predictors
 X <- matrix(rnorm(N * K), nrow = N, ncol = K)
@@ -137,30 +135,30 @@ stan_data <- list(
 )
 
 # Fit the model
-fit <- sampling(stanDso, data = stan_data, iter = 20000,chains = 1,seed = 123)
+fit <- sampling(stanDso, data = stan_data, iter = 20000, chains = 1, seed = 123)
 
 
 # Print summary of results
 print(fit, pars = c("theta", "beta1", "beta2"))
-z_samples <- extract(fit, "z")$z  # Mixture membership samples
+z_samples <- extract(fit, "z")$z # Mixture membership samples
 
 
 
 
 
 ## POISSON
-rm(list=ls())
+rm(list = ls())
 # primitives
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtpoisson.stan')
+stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtpoisson.stan")
 
 
 # Number of observations
 N <- 200
 K <- 2
-X <- cbind(1, runif(N, -2, 2))  # Intercept and a single predictor
+X <- cbind(1, runif(N, -2, 2)) # Intercept and a single predictor
 
 # True parameters for two components
 beta1 <- c(1, 2)
@@ -172,90 +170,89 @@ theta <- 0.6
 # Generate data from the mixture
 lambda1 <- exp(X %*% beta1)
 lambda2 <- exp(X %*% beta2)
-z <- rbinom(N, 1, theta)  # Latent component memberships
+z <- rbinom(N, 1, theta) # Latent component memberships
 y <- ifelse(z == 1, rpois(N, lambda1), rpois(N, lambda2))
 
 # Save data for Stan
 stan_data <- list(N = N, K = K, X = X, y = y)
 
 # Fit the model
-fit <- sampling(stanDso, data = stan_data, iter = 50000,chains = 1,seed = 123)
+fit <- sampling(stanDso, data = stan_data, iter = 50000, chains = 1, seed = 123)
 
 
 # Print summary of results from stan fit; but cant use as may have switched labels. instead post-process first and compute results manually
-#print(fit, pars = c("theta", "beta1", "beta2"))
+# print(fit, pars = c("theta", "beta1", "beta2"))
 
 #### Now to post-process for possible label switching
 # Extract posterior
 posterior <- extract(fit)
 
 # Extract membership samples
-#z_samples <- extract(fit, "z")$z  
-z_samples = posterior$z
+# z_samples <- extract(fit, "z")$z
+z_samples <- posterior$z
 
 # Extract beta samples
-beta1.p = posterior$beta1
-beta2.p = posterior$beta2
+beta1.p <- posterior$beta1
+beta2.p <- posterior$beta2
 
 # Post process beta samples
 for (i in 1:nrow(z_samples)) {
-  
   # Relabel
-  z_samples[i, ] <- ifelse(z_samples[i,] == 1, 0, 1)
-  
-  if (mean(z_samples[i,]) < 0.5) {  # Check if label 1 is dominant
+  z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
+
+  if (mean(z_samples[i, ]) < 0.5) { # Check if label 1 is dominant
     # Swap labels in z
-    z_samples[i,] <- 1 - z_samples[i, ]
-    
+    z_samples[i, ] <- 1 - z_samples[i, ]
+
     # Swap coefficients for beta
-    temp <- beta1.p[i,]
+    temp <- beta1.p[i, ]
     beta1.p[i, ] <- beta2.p[i, ]
-    beta2.p[i, ] <- temp 
+    beta2.p[i, ] <- temp
   }
 }
 
 # Compute posterior mean, variance and confidence limits for coefficent in each mixture component
-mean_beta1 <- apply(beta1.p,2,mean)
-mean_beta2 <- apply(beta2.p,2,mean)
-var_beta1 <- apply(beta1.p,2,var)
-var_beta2 <- apply(beta2.p,2,var)
-ci_beta1 <- apply(beta1.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
-ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
+mean_beta1 <- apply(beta1.p, 2, mean)
+mean_beta2 <- apply(beta2.p, 2, mean)
+var_beta1 <- apply(beta1.p, 2, var)
+var_beta2 <- apply(beta2.p, 2, var)
+ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
 
 
 
 
 
 
-## GAMMA
-rm(list=ls())
+## GAMMAcmd
+rm(list = ls())
 # primitives
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtgamma.stan')
+stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtgamma.stan")
 
 # For reproducibility
 set.seed(123)
 
 # Parameters for links
-beta1 <- c(0.5, 1.2)   # Intercept and slope for component 1
-phi1 <- 5              # Shape parameter (1/dispersion)
+beta1 <- c(0.5, 1.2) # Intercept and slope for component 1
+phi1 <- 5 # Shape parameter (1/dispersion)
 
 # Parameters for nonlinks
-beta2 <- c(2.0, -0.8)  # Intercept and slope for component 2
-phi2 <- 2              # Shape parameter (1/dispersion)
+beta2 <- c(2.0, -0.8) # Intercept and slope for component 2
+phi2 <- 2 # Shape parameter (1/dispersion)
 
 # Mixing proportion
-theta <- 0.6  # proportion of links
+theta <- 0.6 # proportion of links
 
 # Generate data
-N <- 200  
+N <- 200
 K <- 2
-X <- cbind(1, runif(N, -2, 2))  # Intercept and a single predictor
+X <- cbind(1, runif(N, -2, 2)) # Intercept and a single predictor
 
 # Generate component memberships
-z <- rbinom(N, 1, theta)  # Latent component memberships
+z <- rbinom(N, 1, theta) # Latent component memberships
 
 # Generate response (Y) from Gamma distribution
 y <- numeric(N)
@@ -272,74 +269,58 @@ for (i in 1:N) {
 # Prepare data for Stan
 stan_data <- list(
   N = N,
-  K = K,                
+  K = K,
   y = y,
   X = X
 )
 
 
 # Fit the model
-fit <- sampling(stanDso, data = stan_data, iter = 50000,chains = 1,seed = 123)
+fit <- sampling(stanDso, data = stan_data, iter = 50000, chains = 1, seed = 123)
 
 # Print summary of results from stan fit; but cant use as may have switched labels. instead post-process first and compute results manually
-#print(fit, pars = c("theta", "beta1", "beta2"))
+# print(fit, pars = c("theta", "beta1", "beta2"))
 
 #### Now to post-process for possible label switching
 # Extract posterior
 posterior <- extract(fit)
 
 # Extract membership samples
-#z_samples <- extract(fit, "z")$z  
-z_samples = posterior$z
+# z_samples <- extract(fit, "z")$z
+z_samples <- posterior$z
 
 # Extract beta samples
-beta1.p = posterior$beta1
-beta2.p = posterior$beta2
-phi1 = posterior$phi1
-phi2 = posterior$phi2
+beta1.p <- posterior$beta1
+beta2.p <- posterior$beta2
+phi1 <- posterior$phi1
+phi2 <- posterior$phi2
 
 # Post process beta samples
 for (i in 1:nrow(z_samples)) {
-  
   # Relabel
-  z_samples[i, ] <- ifelse(z_samples[i,] == 1, 0, 1)
-  
-  #swap
-  if (mean(z_samples[i,]) < 0.5) {  # Check if label 1 is dominant
+  z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
+
+  # swap
+  if (mean(z_samples[i, ]) < 0.5) { # Check if label 1 is dominant
     # Swap labels in z
-    z_samples[i,] <- 1 - z_samples[i, ]
-    
+    z_samples[i, ] <- 1 - z_samples[i, ]
+
     # Swap coefficients for beta
-    temp <- beta1.p[i,]
+    temp <- beta1.p[i, ]
     beta1.p[i, ] <- beta2.p[i, ]
-    beta2.p[i, ] <- temp 
-    
+    beta2.p[i, ] <- temp
+
     # Swap coefficients for shape (dispersion)
     temp <- phi1[i]
     phi1[i] <- phi2[i]
-    phi2[i] <- temp 
+    phi2[i] <- temp
   }
 }
 
 # Compute posterior mean, variance and confidence limits for coefficent in each mixture component
-mean_beta1 <- apply(beta1.p,2,mean)
-mean_beta2 <- apply(beta2.p,2,mean)
-var_beta1 <- apply(beta1.p,2,var)
-var_beta2 <- apply(beta2.p,2,var)
-ci_beta1 <- apply(beta1.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
-ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+mean_beta1 <- apply(beta1.p, 2, mean)
+mean_beta2 <- apply(beta2.p, 2, mean)
+var_beta1 <- apply(beta1.p, 2, var)
+var_beta2 <- apply(beta2.p, 2, var)
+ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))

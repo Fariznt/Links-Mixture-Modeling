@@ -1,6 +1,6 @@
 data {
   int<lower=1> N;             // Number of observations
-  int<lower=0> y[N];          // Poisson response variable (counts)
+  array[N] int<lower=0> y;         // Poisson response variable (counts)
   int<lower=1> K;             // Number of predictors
   matrix[N, K] X;             // Predictor matrix
 }
@@ -33,7 +33,7 @@ model {
 }
 
 generated quantities {
-  int<lower=1, upper=2> z[N];    // Mixture membership
+  array[N] int<lower=1, upper=2> z;    // Mixture membership
   for (n in 1:N) {
     // Calculate unnormalized log probabilities for each component
     real log_prob1 = log(theta) + poisson_log_lpmf(y[n] | X[n] * beta1);
