@@ -3,9 +3,10 @@ rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
 # main wrapper function
-fit_model <- function(formula, family, data, iterations = 1000, burning_iterations = 500, chains = 2, seed = NULL) {
+fit_model <- function(formula, family, data, iterations, burning_iterations, chains, seed) {
   
   # generate a random seed if one is not given
+  seed_input <- as.integer(seed)
   if (is.null(seed)) {
     seed <- sample.int(1e6, 1) 
   }
@@ -45,3 +46,24 @@ fit_model <- function(formula, family, data, iterations = 1000, burning_iteratio
 
   return(list(fit = fit))
 }
+
+# User prompts
+formula <- as.formula(readline("Enter the formula (e.g., y ~ x1 + x2): "))
+family <- readline("Enter the family (linear, logistic, poisson, gamma): ")
+data_path <- readline("Enter the name of your dataset (CSV format, must be in working directory): ")
+iterations <- as.integer(readline("Enter the number of iterations (default 1000): "))
+burning_iterations <- as.integer(readline("Enter the number of burning iterations (default 1000): "))
+chains <- as.integer(readline("Enter the number of chains (default 2): "))
+seed <- readline("Enter the seed, or random for random seed (default 123): ")
+
+# Reading in the dataset
+data <- read.csv(data_path)
+
+# Run the model
+fit_result <- fit_model(formula, family, data, 
+                        iterations = ifelse(iterations == "", 1000, iterations), 
+                        burning_iterations = ifelse(burning_iterations == "", 1000, burning_iterations), 
+                        chains = ifelse(chains == "", 2, chains), 
+                        seed = ifelse())
+
+print(fit_result$fit)
