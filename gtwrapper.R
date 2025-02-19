@@ -5,21 +5,36 @@ options(mc.cores = parallel::detectCores())
 # main wrapper function
 fit_model <- function(formula, family, data, iterations, burning_iterations, chains, seed) {
   
-  # generate a random seed if one is not given
-  seed_input <- as.integer(seed)
-  if (is.null(seed)) {
-    seed <- sample.int(1e6, 1) 
+  # Parses seed and generates random if "random" passed in
+  if (seed == "random") {
+    seed <- sample.int(1e6, 1)
+  } else {
+    seed <- as.integer(seed)
   }
+  
+  # Checks what type of data should be loaded & NA values
+  if (identical(data, "random")) {
+    source("gtrun.R")
+    data <- generate_synthetic_data(family, seed)
+    
+  } else {
+    if (!file.exists(data)) {
+      stop("Error: The specified CSV file does not exist.")
+    } else {
+      data <- read.csv(data)
+    }
+  }
+  
   
   # Choose the post-processing function based on family
   if (family == "linear") {
-    stan_file <- "gtlinear.stan"   # relative paths for now
+    stan_file <- file.path("gtlinear.stan")   # relative paths for now
   } else if (family == "logistic") {
-    stan_file <- "gtlogistic.stan"
+    stan_file <- file.path("gtlogistic.stan")
   } else if (family == "poisson") {
-    stan_file <- "gtpoisson.stan"
+    stan_file <- file.path("gtpoisson.stan")
   } else if (family == "gamma") {
-    stan_file <- "gtgamma.stan"
+    stan_file <- file.path("gtgamma.stan")
   } else {
     stop("Unknown family! Choose from: 'linear', 'logistic', 'poission', or 'gamma'")
   }
@@ -38,32 +53,35 @@ fit_model <- function(formula, family, data, iterations, burning_iterations, cha
   # Fit the model using sampling
   fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, chains = chains, seed = seed)
 
-  # TO DO: the post processing stuff, based on each family type
-
-
-
-
 
   return(list(fit = fit))
 }
 
-# User prompts
-formula <- as.formula(readline("Enter the formula (e.g., y ~ x1 + x2): "))
-family <- readline("Enter the family (linear, logistic, poisson, gamma): ")
-data_path <- readline("Enter the name of your dataset (CSV format, must be in working directory): ")
-iterations <- as.integer(readline("Enter the number of iterations (default 1000): "))
-burning_iterations <- as.integer(readline("Enter the number of burning iterations (default 1000): "))
-chains <- as.integer(readline("Enter the number of chains (default 2): "))
-seed <- readline("Enter the seed, or random for random seed (default 123): ")
 
-# Reading in the dataset
-data <- read.csv(data_path)
+args <- commandArgs(trailingOnly = TRUE)
+
+if (length(args) < 3) {
+  stop("Usage: Rscript gtwrapper.R formula family data (optional: iterations, burning_iterations, chains, seed)")
+}
+
+# assign default values
+default_iterations <- 10000
+default_burning_iterations <- 1000
+default_chains <- 2
+default_seed <- 123
+
+# assign argument inputs 
+formula <- as.formula(args[1])
+family <- args[2]
+data <- args[3]
+iterations <- ifelse(length(args) < 4, default_iterations, as.integer(args[4]))
+burning_iterations <- ifelse(length(args) < 5, default_burning_iterations, as.integer(args[5]))
+chains <- ifelse(length(args) < 6, default_chains, as.integer(args[6]))
+seed <- ifelse(length(args) < 7, default_seed, ifelse(args[7] == "random", sample.int(1e6, 1), as.integer(args[7])))
+
 
 # Run the model
-fit_result <- fit_model(formula, family, data, 
-                        iterations = ifelse(iterations == "", 1000, iterations), 
-                        burning_iterations = ifelse(burning_iterations == "", 1000, burning_iterations), 
-                        chains = ifelse(chains == "", 2, chains), 
-                        seed = ifelse())
+fit_result <- fit_model(formula, family, data, iterations, burning_iterations, chains, seed)
 
 print(fit_result$fit)
+
