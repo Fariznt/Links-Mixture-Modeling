@@ -44,18 +44,29 @@ fit_model <- function(formula, family, data, iterations, burning_iterations, cha
   } else {
     stop("Unknown family! Choose from: 'linear', 'logistic', 'poission', or 'gamma'")
   }
-  
-  # Prepare the data 
+
+  # Check for missing or NA values in the dataset:
+  # returns an array of all the missing values with the same size as the data set
+  missing_data <- which(is.na(data), arr.ind = TRUE)
+
+  if (length(missing_data) > 0) {
+    stop(
+      "Error: Missing values found in the following rows and columns:\n",
+      paste(apply(missing_data, 1, function(x) paste("Row", x[1], "Column", x[2])), collapse = "\n")
+    )
+  }
+
+  # Prepare the data
   stan_data <- list(
-    N = nrow(data),                      # Number of observations
-    K = ncol(data) - 1,                  # Number of predictors
-    X = as.matrix(data[, -ncol(data)]),  # Predictor matrix
-    y = data[, ncol(data)]               # Response vector
+    N = nrow(data), # Number of observations
+    K = ncol(data) - 1, # Number of predictors
+    X = as.matrix(data[, -ncol(data)]), # Predictor matrix
+    y = data[, ncol(data)] # Response vector
   )
 
   # Load the Stan model
   stan_model <- rstan::stan_model(file = stan_file)
-  
+
   # Fit the model using sampling
   fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, chains = chains, seed = seed)
   
@@ -91,4 +102,3 @@ seed <- ifelse(length(args) < 7, default_seed, ifelse(args[7] == "random", sampl
 fit_result <- fit_model(formula, family, data, iterations, burning_iterations, chains, seed)
 
 print(fit_result$fit)
-
