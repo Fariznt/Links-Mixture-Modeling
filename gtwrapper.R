@@ -1,3 +1,17 @@
+# for command line: load an R save file for the data (.RData) + data source name (from the saved img)
+# otherwise, expect a data.frame object
+# expect a lot of possible different formats
+
+# Postprocessing: (2 options)
+# 1. just return 0/1 matrix saying if it's a true or false link -> (do postprocessing steps in gtrun)
+# 2. could create posterior samples vector and return only for the betas (parameters) (mcmc object)
+# add a postprocessing parameter to pick between these two options for now, maybe return both based on
+# size in the future
+# z-samples build the matrix, betas are the parameters
+
+# next step: generate the stan file itself
+
+
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
