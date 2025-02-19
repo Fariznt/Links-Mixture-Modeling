@@ -22,6 +22,12 @@ fit_model <- function(formula, family, data, iterations, burning_iterations, cha
       stop("Error: The specified CSV file does not exist.")
     } else {
       data <- read.csv(data)
+      
+      if (anyNA(data)) {
+        na_locations <- which(is.na(data), arr.ind = TRUE)  # Get row and column locations of NA values
+        stop("Error: NA values found in the data. Locations of NA values:\n", 
+             paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
+      }
     }
   }
   
@@ -52,7 +58,8 @@ fit_model <- function(formula, family, data, iterations, burning_iterations, cha
   
   # Fit the model using sampling
   fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, chains = chains, seed = seed)
-
+  
+  # TODO: figure out what needs to be returned from postprocessing function
 
   return(list(fit = fit))
 }
