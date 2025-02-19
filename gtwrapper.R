@@ -3,16 +3,16 @@ rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
 # main wrapper function
-fit_model <- function(formula, family, data, iterations = 1000, burning_iterations = 500, chains = 2, seed = NULL) {
+fit_model <- function(formula, family, data, iterations = 1000, burning_iterations = 500, chains = 1, seed = NULL) {
   
   # generate a random seed if one is not given
   if (is.null(seed)) {
     seed <- sample.int(1e6, 1) 
   }
   
-  # Choose the post-processing function based on family
+  # Choose the stan file based on family
   if (family == "linear") {
-    stan_file <- "gtlinear.stan"   # relative paths for now
+    stan_file <- "gtlinear.stan"         # relative paths for now
   } else if (family == "logistic") {
     stan_file <- "gtlogistic.stan"
   } else if (family == "poisson") {

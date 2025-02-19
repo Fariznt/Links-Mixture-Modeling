@@ -97,7 +97,7 @@ ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlogistic.stan")
+stanDso <- rstan::stan_model(file = "C:\\Users\\jenni\\Links-Mixture-Modeling\\gtlogistic.stan")
 
 
 # Data
@@ -152,7 +152,7 @@ rm(list = ls())
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtpoisson.stan")
+stanDso <- rstan::stan_model(file = "C:\\Users\\jenni\\Links-Mixture-Modeling\\gtpoisson.stan")
 
 
 # Number of observations
@@ -230,7 +230,7 @@ rm(list = ls())
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso <- rstan::stan_model(file = "~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtgamma.stan")
+stanDso <- rstan::stan_model(file = "C:\\Users\\jenni\\Links-Mixture-Modeling\\gtgamma.stan")
 
 # For reproducibility
 set.seed(123)
