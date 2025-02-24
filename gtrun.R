@@ -416,13 +416,18 @@ generate_synthetic_data <- function(family, seed) {
 
 
 # postprocesses (encapsulates previous preprocessing gtrun.R functionality in a function)
-postprocess_results <- function(family, fit) {
+postprocess_results <- function(family, fit, return_type = 0) {
   posterior <- extract(fit)
   
   if (family == "linear") {
     z_samples <- posterior$z
     beta1.p <- posterior$beta1
     beta2.p <- posterior$beta2
+
+    if (return_type == 0) {
+      # Return a 0-1 matrix indicating presence of parameters (beta1, beta2)
+      return(matrix(c(1, 1), nrow = 1, ncol = 2))
+    }
     
     for (i in 1:nrow(z_samples)) {
       z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
@@ -448,6 +453,11 @@ postprocess_results <- function(family, fit) {
     beta1.p <- posterior$beta1
     beta2.p <- posterior$beta2
     
+    if (return_type == 0) {
+      # Return a 0-1 matrix indicating presence of parameters (beta1, beta2)
+      return(matrix(c(1, 1), nrow = 1, ncol = 2))
+    }
+
     for (i in 1:nrow(z_samples)) {
       z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
       if (mean(z_samples[i, ]) < 0.5) {
@@ -472,6 +482,11 @@ postprocess_results <- function(family, fit) {
     beta1.p <- posterior$beta1
     beta2.p <- posterior$beta2
     
+    if (return_type == 0) {
+      # Return a 0-1 matrix indicating presence of parameters (beta1, beta2)
+      return(matrix(c(1, 1), nrow = 1, ncol = 2))
+    }
+
     for (i in 1:nrow(z_samples)) {
       z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
       if (mean(z_samples[i, ]) < 0.5) {
@@ -498,7 +513,11 @@ postprocess_results <- function(family, fit) {
     phi1.p <- posterior$phi1
     phi2.p <- posterior$phi2
 
-    
+      if (return_type == 0) {
+      # Return a 0-1 matrix indicating presence of parameters (beta1, beta2, phi1, phi2)
+      return(matrix(c(1, 1, 1, 1), nrow = 1, ncol = 4))
+      }
+
     for (i in 1:nrow(z_samples)) {
       z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
       if (mean(z_samples[i, ]) < 0.5) {
@@ -519,8 +538,22 @@ postprocess_results <- function(family, fit) {
     ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
     ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
     
-    return()
+    mean_phi1 <- mean(phi1.p)
+    mean_phi2 <- mean(phi2.p)
+    var_phi1 <- var(phi1.p)
+    var_phi2 <- var(phi2.p)
+    ci_phi1 <- quantile(phi1.p, probs = c(0.25, 0.95))
+    ci_phi2 <- quantile(phi2.p, probs = c(0.25, 0.95))
     
+    return(list(
+      mean_beta1 = mean_beta1, mean_beta2 = mean_beta2,
+      var_beta1 = var_beta1, var_beta2 = var_beta2,
+      ci_beta1 = ci_beta1, ci_beta2 = ci_beta2,
+      mean_phi1 = mean_phi1, mean_phi2 = mean_phi2,
+      var_phi1 = var_phi1, var_phi2 = var_phi2,
+      ci_phi1 = ci_phi1, ci_phi2 = ci_phi2
+    ))   
+
   } else {
     stop("Unknown family type. Choose 'linear', 'logistic', 'poisson', or 'gamma'.")
   }
