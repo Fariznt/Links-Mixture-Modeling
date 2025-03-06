@@ -1,4 +1,3 @@
-
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
@@ -8,7 +7,7 @@ source("gtpostprocessing.R")
 
 # main wrapper function
 fit_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed) {
-  # Parses seed and generates random if "random" passed in
+  # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
   } else {
@@ -20,10 +19,10 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
     stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
   }
 
-  # Checks what type of data should be loaded & NA values
+  # Check what type of data should be loaded & handle NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
-    data <- generate_synthetic_data(family, seed)
+    data <- generate_synthetic_data(p_family, seed)
     print(head(data))  # first few rows of generated data
     print(dim(data))   # dimensions of generated data
   } else {
@@ -32,7 +31,7 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
     } else {
       data <- read.csv(data)
       if (anyNA(data)) {
-        na_locations <- which(is.na(data), arr.ind = TRUE)        # Get row and column locations of NA values
+        na_locations <- which(is.na(data), arr.ind = TRUE)  # Get row and column locations of NA values
         stop("Error: NA values found in the data. Locations of NA values:\n", 
              paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
       }
@@ -45,17 +44,12 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   }
 
   # Choose the stan file based on family
-  if (family == "linear") {
-    stan_file <- file.path("gtlinear.stan")
-  } else if (family == "logistic") {
-    stan_file <- file.path("gtlogistic.stan")
-  } else if (family == "poisson") {
-    stan_file <- file.path("gtpoisson.stan")
-  } else if (family == "gamma") {
-    stan_file <- file.path("gtgamma.stan")
-  } else {
-    stop("Unknown family! Choose from: 'linear', 'logistic', 'poission', or 'gamma'")
-  }
+  stan_file <- switch(p_family,
+                      "linear" = "gtlinear.stan",
+                      "logistic" = "gtlogistic.stan",
+                      "poisson" = "gtpoisson.stan",
+                      "gamma" = "gtgamma.stan",
+                      stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
 
   # Prepare the data
   if (ncol(data) <= 1) {
@@ -72,14 +66,11 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   stan_model <- rstan::stan_model(file = stan_file)
 
   # Fit the model using sampling
-  fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, chains = chains, seed = seed)
+  fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, 
+                  chains = chains, seed = seed)
 
-  # Prints out results
-  if (result_type == 0) {
-    result <- get_results(family, fit, return_type = 0)
-  } else {
-    result <- get_results(family, fit, return_type = 1)
-  }
+  # Process results based on result_type
+  result <- get_results(p_family, fit, return_type = result_type)
   
   print(result)
   return(fit)
@@ -91,13 +82,13 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
 
 formula <- y ~ X1 + X2
 fit_result <- fit_model(formula = formula,
-                        family = "linear",
+                        p_family = "linear",
                         data = "random",
+                        result_type = 0,
                         iterations = 10000,
                         burning_iterations = 1000,
                         chains = 2,
-                        seed = 123,
-                        result_type = 0)
+                        seed = 123)
 
 
 
@@ -149,7 +140,7 @@ default_result_type <- 0  # Default to 0 (matrix)
 
 # assign argument inputs 
 formula <- as.formula(args[1])
-family <- args[2]
+p_family <- args[2]
 data <- args[3]
 result_type <- ifelse(length(args) < 8, default_result_type, as.integer(args[8]))
 iterations <- ifelse(length(args) < 4, default_iterations, as.integer(args[4]))
@@ -158,7 +149,7 @@ chains <- ifelse(length(args) < 6, default_chains, as.integer(args[6]))
 seed <- ifelse(length(args) < 7, default_seed, ifelse(args[7] == "random", sample.int(1e6, 1), as.integer(args[7])))
 
 # Run the model
-fit_result <- fit_model(formula, family, data, result_type, iterations, burning_iterations, chains, seed)
+fit_result <- fit_model(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed)
 
 print(fit_result$fit)
 print(fit_result$result_type)

@@ -1,5 +1,7 @@
 # # function to either return 0,1 matrix or post process results.
 # # return_type: 0 for matrix, 1 for post process, default is matrix
+library(rstan)
+
 get_results <- function(family, fit, return_type) {
   posterior <- extract(fit)
   z_samples <- posterior$z            # get z-samples from fit
@@ -7,6 +9,10 @@ get_results <- function(family, fit, return_type) {
   beta2.p <- posterior$beta2          # get bata2 from fit
   phi1.p <- ifelse(family == "gamma", posterior$phi1, NULL)      # get phi1 if family is gamma
   phi2.p <- ifelse(family == "gamma", posterior$phi2, NULL)      # get phi2 is family is gamma
+
+  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
+  stop("Error: Missing expected parameters in posterior")
+  }
 
   # helper function for flipping z_samples and processing params
   process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
