@@ -1,23 +1,13 @@
-# for command line: load an R save file for the data (.RData) + data source name (from the saved img)
-# otherwise, expect a data.frame object
-# expect a lot of possible different formats
-
-# Postprocessing: (2 options)
-# 1. just return 0/1 matrix saying if it's a true or false link -> (do postprocessing steps in gtrun)
-# 2. could create posterior samples vector and return only for the betas (parameters) (mcmc object)
-# add a postprocessing parameter to pick between these two options for now, maybe return both based on
-# size in the future
-# z-samples build the matrix, betas are the parameters
-
-# next step: generate the stan file itself
 
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-source("gtrun.R") # source of helper functions
+# source of helper functions
+source("gtrun.R") 
+source("gtpostprocessing.R")
 
-# MAIN WRAPPER FUNCTION
-fit_model <- function(formula, family, data, result_type, iterations, burning_iterations, chains, seed) {  
+# main wrapper function
+fit_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed) {
   # Parses seed and generates random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
@@ -29,7 +19,7 @@ fit_model <- function(formula, family, data, result_type, iterations, burning_it
   if (!(result_type %in% c(0, 1))) {
     stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
   }
-  
+
   # Checks what type of data should be loaded & NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
@@ -112,9 +102,38 @@ fit_result <- fit_model(formula = formula,
 
 
 
+
+
+
+load_data <- function(data_input) {
+  if (is.data.frame(data_input)) { # Deals with data already in data.frame format
+    return (data_input)
+    
+  } else if (data_input == "random") {
+    return (data_input)
+    
+  } else if (file.exists(data_input)) { # Deals with csv or the rds data objects Prof Gutman mentioned
+    
+    if (grepl("\\.csv$", data_input)) { # csv
+      data <- read.csv(data_input)
+      
+    } else if (grepl("\\.rds$", data_input)) { #rds
+      data <- readRDS(data_input)
+      if (!is.data.frame(data)) { # checks that it is a data.frame object stored inside
+        stop("Error: .rds file does not contain a data.frame")
+      }
+    } else {
+      stop("Error: Unsupported file format. Use .csv or .rds")
+    }
+    return(data)
+  } else {
+    stop("Error: Data input must be a data.frame or a valid file path")
+  }
+}
+
+
 ##########################################################
 # command line prompting
-
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 3) {
