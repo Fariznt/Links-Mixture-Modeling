@@ -2,7 +2,7 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 # source of helper functions
-source("gtrun.R") 
+source("gtpreprocessing.R") 
 source("gtpostprocessing.R")
 
 # main wrapper function
@@ -89,9 +89,6 @@ fit_result <- fit_model(formula = formula,
                         burning_iterations = 1000,
                         chains = 2,
                         seed = 123)
-
-
-
 
 
 

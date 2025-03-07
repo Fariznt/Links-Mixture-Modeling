@@ -7,8 +7,14 @@ get_results <- function(family, fit, return_type) {
   z_samples <- posterior$z            # get z-samples from fit
   beta1.p <- posterior$beta1          # get beta1 from fit
   beta2.p <- posterior$beta2          # get bata2 from fit
-  phi1.p <- ifelse(family == "gamma", posterior$phi1, NULL)      # get phi1 if family is gamma
-  phi2.p <- ifelse(family == "gamma", posterior$phi2, NULL)      # get phi2 is family is gamma
+  
+  if (family == "gamma") {
+    phi1.p <- posterior$phi1
+    phi2.p <- posterior$phi2
+  } else {
+    phi1.p <- NULL
+    phi2.p <- NULL
+  }
 
   if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
   stop("Error: Missing expected parameters in posterior")

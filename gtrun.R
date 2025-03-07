@@ -12,7 +12,7 @@ set.seed(123)
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlinear.stan')
+stanDso = rstan::stan_model(file='~/Desktop/utra/Links-Mixture-Modeling/gtlinear.stan')
 
 # Parameters
 N <- 200                # Number of observations
@@ -98,7 +98,7 @@ ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtlogistic.stan')
+stanDso = rstan::stan_model(file='~/Desktop/utra/Links-Mixture-Modeling/gtlogistic.stan')
 
 
 # Data
@@ -153,7 +153,7 @@ rm(list=ls())
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtpoisson.stan')
+stanDso = rstan::stan_model(file='~/Desktop/utra/Links-Mixture-Modeling/gtpoisson.stan')
 
 
 # Number of observations
@@ -221,7 +221,14 @@ var_beta2 <- apply(beta2.p,2,var)
 ci_beta1 <- apply(beta1.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
 ci_beta2 <- apply(beta2.p,2,function(x) quantile(x, probs = c(0.25, 0.95)))
 
+print(mean_beta1)
+print(mean_beta2)
+print(var_beta1)
+print(var_beta2)
+print(ci_beta1)
+print(ci_beta1)
 
+print(z_samples)
 
 
 
@@ -232,7 +239,7 @@ rm(list=ls())
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-stanDso = rstan::stan_model(file='~/Desktop/Folders/Record-Linkage-Review-Code/Secondary Analysis/gtgamma.stan')
+stanDso = rstan::stan_model(file='~/Desktop/utra/Links-Mixture-Modeling/gtgamma.stan')
 
 # For reproducibility
 set.seed(123)
