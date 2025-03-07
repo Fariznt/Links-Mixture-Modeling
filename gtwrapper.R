@@ -125,7 +125,7 @@ load_data <- function(data_input) {
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 3) {
-  stop("Usage: Rscript gtwrapper.R formula family data (optional: iterations, burning_iterations, chains, seed, result_type)")
+  stop("Usage: Rscript gtwrapper.R formula family data result_type (optional: iterations, burning_iterations, chains, seed)")
 }
 
 # assign default values
