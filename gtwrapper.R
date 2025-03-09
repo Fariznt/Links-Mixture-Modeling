@@ -2,7 +2,7 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 # source of helper functions
-source("gtpreprocessing.R") 
+source("gtpreprocessing.R")
 source("gtpostprocessing.R")
 
 # main wrapper function
@@ -70,10 +70,7 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
                   chains = chains, seed = seed)
 
   # Process results based on result_type
-  result <- get_results(p_family, fit, return_type = result_type)
-  
-  print(result)
-  return(fit)
+  result <- get_results(p_family, fit, result_type)
 }
 
 
@@ -84,7 +81,7 @@ formula <- y ~ X1 + X2
 fit_result <- fit_model(formula = formula,
                         p_family = "linear",
                         data = "random",
-                        result_type = 0,
+                        result_type = 1,
                         iterations = 10000,
                         burning_iterations = 1000,
                         chains = 2,
