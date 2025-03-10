@@ -38,6 +38,8 @@ get_results <- function(family, fit, return_type) {
         }
       }
     }
+    
+    print(return_type)
 
     if (return_type == 0) {
       print("Printing z_samples matrix:")

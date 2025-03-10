@@ -7,13 +7,20 @@ source("gtpostprocessing.R")
 
 # main wrapper function
 fit_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed) {
+  
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
   } else {
     seed <- as.integer(seed)
   }
-
+  
+  print("RESULT TYPE IS")
+  print(result_type)
+  
+  print("FAMILy IS")
+  print(p_family)
+  
   # Process the results based on the result_type
   if (!(result_type %in% c(0, 1))) {
     stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
@@ -55,11 +62,17 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")
   }
+  
+  #Handle the formula & prepare the data
+  model_frame <- model.frame(formula, data)
+  y <- model.response(model_frame)
+  X <- model.matrix(formula, model_frame)[, -1]
+  
   stan_data <- list(
     N = nrow(data),
     K = ncol(data) - 1,
-    X = as.matrix(data[, -ncol(data)]),
-    y = data[, ncol(data)]
+    X = X,
+    y = y
   )
 
   # Load the Stan model
@@ -126,21 +139,23 @@ if (length(args) < 3) {
 }
 
 # assign default values
-default_iterations <- 10000
+default_iterations <- 1000
 default_burning_iterations <- 1000
 default_chains <- 2
 default_seed <- 123
 default_result_type <- 0  # Default to 0 (matrix)
 
+cat("args[4]:", args[4], "\n")
+
 # assign argument inputs 
 formula <- as.formula(args[1])
 p_family <- args[2]
 data <- args[3]
-result_type <- ifelse(length(args) < 8, default_result_type, as.integer(args[8]))
-iterations <- ifelse(length(args) < 4, default_iterations, as.integer(args[4]))
-burning_iterations <- ifelse(length(args) < 5, default_burning_iterations, as.integer(args[5]))
-chains <- ifelse(length(args) < 6, default_chains, as.integer(args[6]))
-seed <- ifelse(length(args) < 7, default_seed, ifelse(args[7] == "random", sample.int(1e6, 1), as.integer(args[7])))
+result_type <- ifelse(length(args) < 4, default_result_type, as.integer(args[4]))
+iterations <- ifelse(length(args) < 5, default_iterations, as.integer(args[5]))
+burning_iterations <- ifelse(length(args) < 6, default_burning_iterations, as.integer(args[6]))
+chains <- ifelse(length(args) < 7, default_chains, as.integer(args[7]))
+seed <- ifelse(length(args) < 8, default_seed, ifelse(args[8] == "random", sample.int(1e6, 1), as.integer(args[8])))
 
 # Run the model
 fit_result <- fit_model(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed)
