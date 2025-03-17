@@ -39,13 +39,6 @@ get_results <- function(family, fit, return_type) {
       }
     }
     
-    print(return_type)
-
-    if (return_type == 0) {
-      print("Printing z_samples matrix:")
-      print(z_samples)  # Print the matrix z_samples
-    } else if (return_type == 1) {
-      print("Printing betas and related statistics:")
       # Calculate statistics
       mean_beta1 <- apply(beta1.p, 2, mean)
       mean_beta2 <- apply(beta2.p, 2, mean)
@@ -54,6 +47,11 @@ get_results <- function(family, fit, return_type) {
       ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
       ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
 
+    if (return_type == 0) {
+      print("Printing z_samples matrix:")
+      print(z_samples)  # Print the matrix z_samples
+    } else if (return_type == 1) {
+      print("Printing betas and related statistics:")
       # Print each beta with a descriptive label
       cat("Mean beta1: ", mean_beta1, "\n")
       cat("Mean beta2: ", mean_beta2, "\n")
@@ -63,7 +61,7 @@ get_results <- function(family, fit, return_type) {
       cat("95% CI beta2: ", ci_beta2, "\n")
     }
   }
-
   # Call process_parameters helper function
   process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)
+  return (list(z_samples, mean_beta1, mean_beta2, var_beta1, var_beta2, ci_beta1, ci_beta2))
 }

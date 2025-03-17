@@ -84,6 +84,7 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
 
   # Process results based on result_type
   result <- get_results(p_family, fit, result_type)
+  return(result)
 }
 
 
