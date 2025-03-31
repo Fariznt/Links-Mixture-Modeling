@@ -5,8 +5,120 @@ options(mc.cores = parallel::detectCores())
 source("gtpreprocessing.R")
 source("gtpostprocessing.R")
 
+
+generate_mixture_stan <- function(components, formula, data) {
+  
+  # checks that all models are valid
+  valid_components <- c("linear", "poisson", "gamma", "logistic")
+  if (!all(components %in% valid_components)) {
+    stop("Invalid component type. Must be: linear, poisson, gamma, or logistic")
+  }
+  
+  # parse al the necessary info
+  model_frame <- model.frame(formula, data)
+  y <- model.response(model_frame)
+  X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]  # Remove intercept
+  K <- ncol(X)
+  N <- nrow(X)
+  
+  response_type <- if ("logistic" %in% components) "int<lower=0, upper=1>" else "real"
+  if (response_type == "int<lower=0, upper=1>" && !all(y %in% c(0, 1))) {
+    stop("Logistic component requires binary response (0/1)")
+  }
+  
+  get_component_likelihood <- function(type, i) {
+    switch(type,
+           "linear" = sprintf("normal_lpdf(y[n] | mu%d + X[n] * beta%d, sigma%d)", i, i, i),
+           "poisson" = sprintf("poisson_log_lpmf(y[n] | dot_product(X[n], beta%d))", i),
+           "gamma" = sprintf("gamma_lpdf(y[n] | shape%d, shape%d/exp(dot_product(X[n], beta%d)))", i, i, i),
+           "logistic" = sprintf("bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta%d))", i)
+    )
+  }
+  
+  param_blocks <- unlist(lapply(seq_along(components), function(i) {
+    type <- components[i]
+    switch(type,
+           "linear" = c(
+             sprintf("real mu%d;", i),
+             sprintf("real<lower=0> sigma%d;", i),
+             sprintf("vector[K] beta%d;", i)
+           ),
+           "poisson" = sprintf("vector[K] beta%d;", i),
+           "gamma" = c(
+             sprintf("real<lower=0> shape%d;", i),
+             sprintf("vector[K] beta%d;", i)
+           ),
+           "logistic" = sprintf("vector[K] beta%d;", i)
+    )
+  }))
+  
+  prior_blocks <- unlist(lapply(seq_along(components), function(i) {
+    type <- components[i]
+    switch(type,
+           "linear" = c(
+             sprintf("mu%d ~ normal(0, 5);", i),
+             sprintf("sigma%d ~ cauchy(0, 2.5);", i),
+             sprintf("beta%d ~ normal(0, 5);", i)
+           ),
+           "poisson" = sprintf("beta%d ~ normal(0, 5);", i),
+           "gamma" = c(
+             sprintf("shape%d ~ gamma(0.1, 0.1);", i),
+             sprintf("beta%d ~ normal(0, 5);", i)
+           ),
+           "logistic" = sprintf("beta%d ~ normal(0, 5);", i)
+    )
+  }))
+  
+  if (length(components) == 2) {
+    likelihood_code <- sprintf(
+      "for (n in 1:N) {\n    target += log_mix(theta,\n      %s,\n      %s);\n  }",
+      get_component_likelihood(components[1], 1),
+      get_component_likelihood(components[2], 2)
+    )
+  } else {
+    stop("Currently only supporting 2-component mixtures")
+  }
+  
+  gen_quant_code <- sprintf(
+    "array[N] int<lower=1, upper=2> z;\n  for (n in 1:N) {\n    real log_prob1 = log(theta) + %s;\n    real log_prob2 = log1m(theta) + %s;\n    z[n] = categorical_rng(softmax([log_prob1, log_prob2]'));\n  }",
+    get_component_likelihood(components[1], 1),
+    get_component_likelihood(components[2], 2)
+  )
+  
+  # final stan code
+  stan_code <- paste(
+    "data {",
+    "  int<lower=1> N;",
+    "  int<lower=1> K;",
+    "  matrix[N, K] X;",
+    "  vector[N] y;",
+    "}",
+    "",
+    "parameters {",
+    if (length(components) > 2) "  simplex[length(components)] theta;" else "  real<lower=0, upper=1> theta;",
+    paste(" ", param_blocks, collapse = "\n"),
+    "}",
+    "",
+    "model {",
+    if (length(components) > 2) "  theta ~ dirichlet(rep_vector(1.0, length(components)));" else "  theta ~ beta(1, 1);",
+    paste(" ", prior_blocks, collapse = "\n"),
+    likelihood_code,
+    "}",
+    "",
+    "generated quantities {",
+    gen_quant_code,
+    "}",
+    sep = "\n"
+  )
+  
+  # Create filename
+  stan_file <- paste0("gtmix_", paste0(components, collapse = "_"), ".stan")
+  writeLines(stan_code, stan_file)
+  return(stan_file)
+}
+
 # main wrapper function
-fit_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed) {
+fit_model <- function(formula, p_family, data, mixture_components = NULL, result_type = 0, iterations = 10000, burning_iterations = 1000, chains = 2, seed = 123) {
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -14,12 +126,6 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   } else {
     seed <- as.integer(seed)
   }
-  
-  print("RESULT TYPE IS")
-  print(result_type)
-  
-  print("FAMILy IS")
-  print(p_family)
   
   # Process the results based on the result_type
   if (!(result_type %in% c(0, 1))) {
@@ -51,12 +157,27 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   }
 
   # Choose the stan file based on family
-  stan_file <- switch(p_family,
-                      "linear" = "gtlinear.stan",
-                      "logistic" = "gtlogistic.stan",
-                      "poisson" = "gtpoisson.stan",
-                      "gamma" = "gtgamma.stan",
-                      stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
+  # stan_file <- switch(p_family,
+                      # "linear" = "gtlinear.stan",
+                      # "logistic" = "gtlogistic.stan",
+                      # "poisson" = "gtpoisson.stan",
+                      # "gamma" = "gtgamma.stan",
+                      # stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
+  
+  if (!is.null(mixture_components)) {
+    if (!is.null(p_family)) {
+      warning("Both p_family and mixture_components specified. Using mixture_components.")
+    }
+    stan_file <- generate_mixture_stan(mixture_components, formula, data)
+    p_family <- "mixture" # can be anything really
+  } else {
+    stan_file <- switch(p_family,
+                        "linear" = "gtlinear.stan",
+                        "logistic" = "gtlogistic.stan",
+                        "poisson" = "gtpoisson.stan",
+                        "gamma" = "gtgamma.stan",
+                        stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
+  }
 
   # Prepare the data
   if (ncol(data) <= 1) {
@@ -87,6 +208,10 @@ fit_model <- function(formula, p_family, data, result_type, iterations, burning_
   return(result)
 }
 
+fit_result <- fit_model(formula = y ~ X1 + X2,
+                        "linear",
+                        data = "random",
+                        mixture_components = c("linear", "linear"))
 
 ##########################################################
 # Linear Fit Test with Random data (temporary)
@@ -96,7 +221,7 @@ fit_result <- fit_model(formula = formula,
                         p_family = "linear",
                         data = "random",
                         result_type = 1,
-                        iterations = 10000,
+                        iterations = 1000,
                         burning_iterations = 1000,
                         chains = 2,
                         seed = 123)
@@ -129,37 +254,3 @@ load_data <- function(data_input) {
     stop("Error: Data input must be a data.frame or a valid file path")
   }
 }
-
-
-##########################################################
-# command line prompting
-args <- commandArgs(trailingOnly = TRUE)
-
-if (length(args) < 3) {
-  stop("Usage: Rscript gtwrapper.R formula family data result_type (optional: iterations, burning_iterations, chains, seed)")
-}
-
-# assign default values
-default_iterations <- 1000
-default_burning_iterations <- 1000
-default_chains <- 2
-default_seed <- 123
-default_result_type <- 0  # Default to 0 (matrix)
-
-cat("args[4]:", args[4], "\n")
-
-# assign argument inputs 
-formula <- as.formula(args[1])
-p_family <- args[2]
-data <- args[3]
-result_type <- ifelse(length(args) < 4, default_result_type, as.integer(args[4]))
-iterations <- ifelse(length(args) < 5, default_iterations, as.integer(args[5]))
-burning_iterations <- ifelse(length(args) < 6, default_burning_iterations, as.integer(args[6]))
-chains <- ifelse(length(args) < 7, default_chains, as.integer(args[7]))
-seed <- ifelse(length(args) < 8, default_seed, ifelse(args[8] == "random", sample.int(1e6, 1), as.integer(args[8])))
-
-# Run the model
-fit_result <- fit_model(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed)
-
-print(fit_result$fit)
-print(fit_result$result_type)
