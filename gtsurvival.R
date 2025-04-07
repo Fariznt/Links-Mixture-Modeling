@@ -5,9 +5,8 @@ options(mc.cores = parallel::detectCores())
 source("gtpreprocessing.R")
 source("gtpostprocessing.R")
 
-# main wrapper function for survival models with truncation param
-fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0) {
-  
+fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
+
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
@@ -44,17 +43,28 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     stop("The input data is not a valid data frame or is empty.")
   }
 
+  # Ensure the status column is handled
+  if (!is.null(status_column)) {
+    if (status_column %in% colnames(data)) {
+      data$status <- ifelse(data[[status_column]] == 0, 0, 1)  # 0 if censored, 1 if event timed out
+    } else {
+      stop("The specified status column does not exist in the data.")
+    }
+  } else {
+    stop("Please specify the 'status_column' parameter.")
+  }
+
   # Choose the stan file based on family
   stan_file <- switch(p_family,
                       "weibull" = "gtweibull.stan",
                       "gamma" = "gtgamma.stan",
                       stop("Unknown family! Choose from: 'weibull' or 'gamma'"))
 
-  # Prepare the data
+  # Prepare the data for Stan model
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")
   }
-  
+
   # Handle the formula & prepare the data
   model_frame <- model.frame(formula, data)
   y <- model.response(model_frame)
@@ -63,21 +73,23 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   # Add truncation if truncation = 1
   if (truncation == 1) {
     truncation_lower <- 0       # lower truncation bound
-    truncation_upper <- max(y)  # upper truncation bound, could adjust this based on the data or user input
+    truncation_upper <- max(y)  # upper truncation bound
     stan_data <- list(
       N = nrow(data),
       K = ncol(data) - 1,
       X = X,
       y = y,
       truncation_lower = truncation_lower,
-      truncation_upper = truncation_upper
+      truncation_upper = truncation_upper,
+      status = data$status  # Include the status column for the model
     )
   } else {
     stan_data <- list(
       N = nrow(data),
       K = ncol(data) - 1,
       X = X,
-      y = y
+      y = y,
+      status = data$status  # Include the status column for the model
     )
   }
 
@@ -92,3 +104,4 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   result <- get_results(p_family, fit, result_type)
   return(result)
 }
+
