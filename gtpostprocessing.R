@@ -60,8 +60,18 @@ get_results <- function(family, fit, return_type) {
       cat("95% CI beta1: ", ci_beta1, "\n")
       cat("95% CI beta2: ", ci_beta2, "\n")
     }
+    
+    return(list(
+        z_samples = z_samples,
+        mean_beta1 = mean_beta1,
+        mean_beta2 = mean_beta2,
+        var_beta1 = var_beta1,
+        var_beta2 = var_beta2,
+        ci_beta1 = ci_beta1,
+        ci_beta2 = ci_beta2
+      ))
   }
   # Call process_parameters helper function
-  process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)
-  return (list(z_samples, mean_beta1, mean_beta2, var_beta1, var_beta2, ci_beta1, ci_beta2))
+  result_list <- process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)
+  return(result_list)
 }

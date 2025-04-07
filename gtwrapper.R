@@ -6,119 +6,259 @@ source("gtpreprocessing.R")
 source("gtpostprocessing.R")
 
 
-generate_mixture_stan <- function(components, formula, data) {
+generate_stan <- function(components, formula, data) {
   
-  # checks that all models are valid
-  valid_components <- c("linear", "poisson", "gamma", "logistic")
-  if (!all(components %in% valid_components)) {
-    stop("Invalid component type. Must be: linear, poisson, gamma, or logistic")
-  }
-  
-  # parse al the necessary info
-  model_frame <- model.frame(formula, data)
-  y <- model.response(model_frame)
-  X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]  # Remove intercept
-  K <- ncol(X)
-  N <- nrow(X)
-  
-  response_type <- if ("logistic" %in% components) "int<lower=0, upper=1>" else "real"
-  if (response_type == "int<lower=0, upper=1>" && !all(y %in% c(0, 1))) {
-    stop("Logistic component requires binary response (0/1)")
-  }
-  
-  get_component_likelihood <- function(type, i) {
-    switch(type,
-           "linear" = sprintf("normal_lpdf(y[n] | mu%d + X[n] * beta%d, sigma%d)", i, i, i),
-           "poisson" = sprintf("poisson_log_lpmf(y[n] | dot_product(X[n], beta%d))", i),
-           "gamma" = sprintf("gamma_lpdf(y[n] | shape%d, shape%d/exp(dot_product(X[n], beta%d)))", i, i, i),
-           "logistic" = sprintf("bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta%d))", i)
+  # checks that inputs are as expected
+  if (identical(components, c("linear", "linear"))) {
+    model_frame <- model.frame(formula, data)
+    y <- model.response(model_frame)
+    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]
+    K <- ncol(X)
+    N <- nrow(X)
+    
+    # Fixed Stan code for linear-linear mixture
+    stan_code <- paste(
+      "data {",
+      "  int<lower=1> N;             // Number of data points",
+      "  int<lower=1> K;             // Number of predictors",
+      "  matrix[N, K] X;             // Predictor matrix",
+      "  vector[N] y;                // Response vector",
+      "}",
+      "parameters {",
+      "  real<lower=0, upper=1> theta; // Mixture weight for the first component",
+      "  real mu1;                     // Mean of the first component",
+      "  real mu2;                     // Mean of the second component",
+      "  real<lower=0> sigma1;         // Standard deviation of the first component",
+      "  real<lower=0> sigma2;         // Standard deviation of the second component",
+      "  vector[K] beta1;              // Regression coefficients for the first component",
+      "  vector[K] beta2;              // Regression coefficients for the second component",
+      "}",
+      "model {",
+      "  // Priors",
+      "  mu1 ~ normal(0, 5);",
+      "  mu2 ~ normal(0, 5);",
+      "  sigma1 ~ cauchy(0, 2.5);",
+      "  sigma2 ~ cauchy(0, 2.5);",
+      "  beta1 ~ normal(0, 5);",
+      "  beta2 ~ normal(0, 5);",
+      "  theta ~ beta(1, 1);          ",
+      "",
+      "  // Mixture model likelihood",
+      "  for (n in 1:N) {",
+      "    target += log_sum_exp(",
+      "      log(theta) + normal_lpdf(y[n] | mu1 + X[n] * beta1, sigma1),",
+      "      log1m(theta) + normal_lpdf(y[n] | mu2 + X[n] * beta2, sigma2)",
+      "    );",
+      "  }",
+      "}",
+      "generated quantities {",
+      "  int<lower=1, upper=2> z[N];    // Mixture membership",
+      "  for (n in 1:N) {",
+      "    // Calculate unnormalized log probabilities for each component",
+      "    real log_prob1 = log(theta) + normal_lpdf(y[n] | mu1 + X[n] * beta1, sigma1);",
+      "    real log_prob2 = log1m(theta) + normal_lpdf(y[n] | mu2 + X[n] * beta2, sigma2);",
+      "    ",
+      "    // Normalize probabilities using softmax",
+      "    vector[2] prob = softmax([log_prob1, log_prob2]');",
+      "    ",
+      "    // Sample z[n] based on the posterior probabilities",
+      "    z[n] = categorical_rng(prob);",
+      "  }",
+      "}",
+      sep = "\n"
     )
-  }
-  
-  param_blocks <- unlist(lapply(seq_along(components), function(i) {
-    type <- components[i]
-    switch(type,
-           "linear" = c(
-             sprintf("real mu%d;", i),
-             sprintf("real<lower=0> sigma%d;", i),
-             sprintf("vector[K] beta%d;", i)
-           ),
-           "poisson" = sprintf("vector[K] beta%d;", i),
-           "gamma" = c(
-             sprintf("real<lower=0> shape%d;", i),
-             sprintf("vector[K] beta%d;", i)
-           ),
-           "logistic" = sprintf("vector[K] beta%d;", i)
+    
+    # Create filename
+    stan_file <- "gtmix_linear.stan"
+    writeLines(stan_code, stan_file)
+    return(stan_file)
+    
+  } else if (identical(components, c("poisson", "poisson"))) {
+    model_frame <- model.frame(formula, data)
+    y <- model.response(model_frame)
+    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]
+    K <- ncol(X)
+    N <- nrow(X)
+    
+    # Poisson-Poisson mixture code
+    stan_code <- paste(
+      "data {",
+      "  int<lower=1> N;             // Number of observations",
+      "  int<lower=0> y[N];          // Poisson response variable (counts)",
+      "  int<lower=1> K;             // Number of predictors",
+      "  matrix[N, K] X;             // Predictor matrix",
+      "}",
+      "",
+      "parameters {",
+      "  real<lower=0, upper=1> theta;           // Mixing proportions (constrained to sum to 1)",
+      "  vector[K] beta1;            // Regression coefficients for component 1",
+      "  vector[K] beta2;            // Regression coefficients for component 2",
+      "}",
+      "",
+      "model {",
+      "  vector[N] log_lik1;         // Log-likelihood for component 1",
+      "  vector[N] log_lik2;         // Log-likelihood for component 2",
+      "  ",
+      "  // Linear predictors for each component",
+      "  vector[N] eta1 = X * beta1; // Linear predictor for component 1",
+      "  vector[N] eta2 = X * beta2; // Linear predictor for component 2",
+      "",
+      "  // Calculate log-likelihoods for each component",
+      "  for (n in 1:N) {",
+      "    log_lik1[n] = poisson_log_lpmf(y[n] | eta1[n]); // Component 1",
+      "    log_lik2[n] = poisson_log_lpmf(y[n] | eta2[n]); // Component 2",
+      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
+      "  }",
+      "",
+      "  // Priors for regression coefficients",
+      "  beta1 ~ normal(0, 5);",
+      "  beta2 ~ normal(0, 5);",
+      "  theta ~ beta(1,1);",
+      "}",
+      "",
+      "generated quantities {",
+      "  int<lower=1, upper=2> z[N];    // Mixture membership",
+      "  for (n in 1:N) {",
+      "    // Calculate unnormalized log probabilities for each component",
+      "    real log_prob1 = log(theta) + poisson_log_lpmf(y[n] | X[n] * beta1);",
+      "    real log_prob2 = log1m(theta) + poisson_log_lpmf(y[n] | X[n] * beta2);",
+      "    ",
+      "    // Normalize probabilities using softmax",
+      "    vector[2] prob = softmax([log_prob1, log_prob2]');",
+      "    ",
+      "    // Sample z[n] based on the posterior probabilities",
+      "    z[n] = categorical_rng(prob);",
+      "  }",
+      "}",
+      sep = "\n"
     )
-  }))
-  
-  prior_blocks <- unlist(lapply(seq_along(components), function(i) {
-    type <- components[i]
-    switch(type,
-           "linear" = c(
-             sprintf("mu%d ~ normal(0, 5);", i),
-             sprintf("sigma%d ~ cauchy(0, 2.5);", i),
-             sprintf("beta%d ~ normal(0, 5);", i)
-           ),
-           "poisson" = sprintf("beta%d ~ normal(0, 5);", i),
-           "gamma" = c(
-             sprintf("shape%d ~ gamma(0.1, 0.1);", i),
-             sprintf("beta%d ~ normal(0, 5);", i)
-           ),
-           "logistic" = sprintf("beta%d ~ normal(0, 5);", i)
+    stan_file <- "gtmix_poisson.stan"
+    writeLines(stan_code, stan_file)
+    return(stan_file)
+    
+  } else if (identical(components, c("gamma", "gamma"))) {
+    stan_code <- paste(
+      "data {",
+      "  int<lower=1> N;               // Number of observations",
+      "  int<lower=1> K;               // Number of predictors",
+      "  vector<lower=0>[N] y;         // Response variable (positive values)",
+      "  matrix[N, K] X;               // Predictor matrix",
+      "}",
+      "",
+      "parameters {",
+      "  real<lower=0, upper=1> theta; // Mixing proportions (must sum to 1)",
+      "  vector[K] beta1;              // Regression coefficients for component 1",
+      "  vector[K] beta2;              // Regression coefficients for component 2",
+      "  real<lower=0> phi1;           // Shape parameter for component 1",
+      "  real<lower=0> phi2;           // Shape parameter for component 2",
+      "}",
+      "",
+      "model {",
+      "  vector[N] mu1 = exp(X * beta1);  // Mean of Gamma for component 1",
+      "  vector[N] mu2 = exp(X * beta2);  // Mean of Gamma for component 2",
+      "  vector[N] log_lik1;",
+      "  vector[N] log_lik2;",
+      "",
+      "  // Calculate log-likelihoods for each component",
+      "  for (n in 1:N) {",
+      "    log_lik1[n] = gamma_lpdf(y[n] | phi1, phi1 / mu1[n]);",
+      "    log_lik2[n] = gamma_lpdf(y[n] | phi2, phi2 / mu2[n]);",
+      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
+      "  }",
+      "",
+      "  // Priors for regression coefficients and mix proportion",
+      "  beta1 ~ normal(0, 5);",
+      "  beta2 ~ normal(0, 5);",
+      "  theta ~ beta(1,1);",
+      "  // Priors for shape parameters",
+      "  phi1 ~ exponential(1);",
+      "  phi2 ~ exponential(1);",
+      "}",
+      "",
+      "generated quantities {",
+      "  int<lower=1, upper=2> z[N];    // Mixture membership",
+      "  vector[N] mu1 = exp(X * beta1);  // Recompute mu1 for generated quantities",
+      "  vector[N] mu2 = exp(X * beta2);  // Recompute mu2 for generated quantities",
+      "  for (n in 1:N) {",
+      "    // Calculate unnormalized log probabilities for each component",
+      "    real log_prob1 = log(theta) + gamma_lpdf(y[n] | phi1, phi1 / mu1[n]);",
+      "    real log_prob2 = log1m(theta) + gamma_lpdf(y[n] | phi2, phi2 / mu2[n]);",
+      "    ",
+      "    // Normalize probabilities using softmax",
+      "    vector[2] prob = softmax([log_prob1, log_prob2]');",
+      "    ",
+      "    // Sample z[n] based on the posterior probabilities",
+      "    z[n] = categorical_rng(prob);",
+      "  }",
+      "}",
+      sep = "\n"
     )
-  }))
-  
-  if (length(components) == 2) {
-    likelihood_code <- sprintf(
-      "for (n in 1:N) {\n    target += log_mix(theta,\n      %s,\n      %s);\n  }",
-      get_component_likelihood(components[1], 1),
-      get_component_likelihood(components[2], 2)
+    stan_file <- "gtmix_gamma.stan"
+    writeLines(stan_code, stan_file)
+    return(stan_file)
+    
+  } else if (identical(components, c("logistic", "logistic"))) {
+    model_frame <- model.frame(formula, data)
+    y <- model.response(model_frame)
+    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]  # Remove intercept
+    K <- ncol(X)
+    N <- nrow(X)
+    
+    # Logistic-logistic mixture Stan code
+    stan_code <- paste(
+      "data {",
+      "  int<lower=1> N;           // Number of observations",
+      "  int<lower=1> K;           // Number of predictors",
+      "  matrix[N, K] X;           // Predictor matrix",
+      "  int<lower=0, upper=1> y[N]; // Binary outcome",
+      "}",
+      "",
+      "parameters {",
+      "  real<lower=0, upper=1> theta;     // Mixing proportion (for component 1)",
+      "  vector[K] beta1;                 // Regression coefficients for component 1",
+      "  vector[K] beta2;                 // Regression coefficients for component 2",
+      "}",
+      "",
+      "model {",
+      "  vector[N] log_lik1;  // Log-likelihood contributions from component 1",
+      "  vector[N] log_lik2;  // Log-likelihood contributions from component 2",
+      "",
+      "  // Priors",
+      "  theta ~ beta(1, 1);           // Uniform prior on mixing proportion",
+      "  beta1 ~ normal(0, 5);         // Priors for regression coefficients (component 1)",
+      "  beta2 ~ normal(0, 5);         // Priors for regression coefficients (component 2)",
+      "",
+      "  // Mixture model likelihood",
+      "  for (n in 1:N) {",
+      "    log_lik1[n] = bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta1));",
+      "    log_lik2[n] = bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta2));",
+      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
+      "  }",
+      "}",
+      "",
+      "generated quantities {",
+      "  int<lower=1, upper=2> z[N];      // Mixture membership for each observation",
+      "  for (n in 1:N) {",
+      "    vector[2] log_weights;",
+      "    log_weights[1] = log(theta) + bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta1));",
+      "    log_weights[2] = log1m(theta) + bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta2));",
+      "    z[n] = categorical_rng(softmax(log_weights)); // Sample membership",
+      "  }",
+      "}",
+      sep = "\n"
     )
+    
+    stan_file <- "gtmix_logistic.stan"
+    writeLines(stan_code, stan_file)
+    return(stan_file)
+    
   } else {
-    stop("Currently only supporting 2-component mixtures")
+    stop("Invalid mixture inputs. Must be: linear, poisson, gamma, or logistic")
   }
-  
-  gen_quant_code <- sprintf(
-    "array[N] int<lower=1, upper=2> z;\n  for (n in 1:N) {\n    real log_prob1 = log(theta) + %s;\n    real log_prob2 = log1m(theta) + %s;\n    z[n] = categorical_rng(softmax([log_prob1, log_prob2]'));\n  }",
-    get_component_likelihood(components[1], 1),
-    get_component_likelihood(components[2], 2)
-  )
-  
-  # final stan code
-  stan_code <- paste(
-    "data {",
-    "  int<lower=1> N;",
-    "  int<lower=1> K;",
-    "  matrix[N, K] X;",
-    "  vector[N] y;",
-    "}",
-    "",
-    "parameters {",
-    if (length(components) > 2) "  simplex[length(components)] theta;" else "  real<lower=0, upper=1> theta;",
-    paste(" ", param_blocks, collapse = "\n"),
-    "}",
-    "",
-    "model {",
-    if (length(components) > 2) "  theta ~ dirichlet(rep_vector(1.0, length(components)));" else "  theta ~ beta(1, 1);",
-    paste(" ", prior_blocks, collapse = "\n"),
-    likelihood_code,
-    "}",
-    "",
-    "generated quantities {",
-    gen_quant_code,
-    "}",
-    sep = "\n"
-  )
-  
-  # Create filename
-  stan_file <- paste0("gtmix_", paste0(components, collapse = "_"), ".stan")
-  writeLines(stan_code, stan_file)
-  return(stan_file)
 }
 
 # main wrapper function
-fit_model <- function(formula, p_family, data, mixture_components = NULL, result_type = 0, iterations = 10000, burning_iterations = 1000, chains = 2, seed = 123) {
+fit_model <- function(formula, p_family, data, components = NULL, result_type = 0, iterations = 10000, burning_iterations = 1000, chains = 2, seed = 123) {
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -156,20 +296,9 @@ fit_model <- function(formula, p_family, data, mixture_components = NULL, result
     stop("The input data is not a valid data frame or is empty.")
   }
 
-  # Choose the stan file based on family
-  # stan_file <- switch(p_family,
-                      # "linear" = "gtlinear.stan",
-                      # "logistic" = "gtlogistic.stan",
-                      # "poisson" = "gtpoisson.stan",
-                      # "gamma" = "gtgamma.stan",
-                      # stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
-  
-  if (!is.null(mixture_components)) {
-    if (!is.null(p_family)) {
-      warning("Both p_family and mixture_components specified. Using mixture_components.")
-    }
-    stan_file <- generate_mixture_stan(mixture_components, formula, data)
-    p_family <- "mixture" # can be anything really
+  # Check if need to generate stan file
+  if (!is.null(components)) {
+    stan_file <- generate_stan(components, formula, data)
   } else {
     stan_file <- switch(p_family,
                         "linear" = "gtlinear.stan",
@@ -208,49 +337,17 @@ fit_model <- function(formula, p_family, data, mixture_components = NULL, result
   return(result)
 }
 
-fit_result <- fit_model(formula = y ~ X1 + X2,
-                        "linear",
-                        data = "random",
-                        mixture_components = c("linear", "linear"))
 
 ##########################################################
-# Linear Fit Test with Random data (temporary)
+# Linear mixture fit test with random data
 
 formula <- y ~ X1 + X2
 fit_result <- fit_model(formula = formula,
                         p_family = "linear",
                         data = "random",
+                        components = c("linear", "linear"),
                         result_type = 1,
-                        iterations = 1000,
+                        iterations = 3000,
                         burning_iterations = 1000,
                         chains = 2,
                         seed = 123)
-
-
-
-
-load_data <- function(data_input) {
-  if (is.data.frame(data_input)) { # Deals with data already in data.frame format
-    return (data_input)
-    
-  } else if (data_input == "random") {
-    return (data_input)
-    
-  } else if (file.exists(data_input)) { # Deals with csv or the rds data objects Prof Gutman mentioned
-    
-    if (grepl("\\.csv$", data_input)) { # csv
-      data <- read.csv(data_input)
-      
-    } else if (grepl("\\.rds$", data_input)) { #rds
-      data <- readRDS(data_input)
-      if (!is.data.frame(data)) { # checks that it is a data.frame object stored inside
-        stop("Error: .rds file does not contain a data.frame")
-      }
-    } else {
-      stop("Error: Unsupported file format. Use .csv or .rds")
-    }
-    return(data)
-  } else {
-    stop("Error: Data input must be a data.frame or a valid file path")
-  }
-}
