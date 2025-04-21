@@ -18,8 +18,8 @@ stanDso = rstan::stan_model(file='~/Desktop/utra/Links-Mixture-Modeling/gtlinear
 N <- 200                # Number of observations
 K <- 2                  # Number of predictors including intercept
 theta <- 0.8           # Proportion of observations that are true links
-beta1 <- c(1, 2)     # Regression coefficients for true links
-beta2 <- c(3, 4)    # Regression coefficients for false links
+beta1 <- c(1, 2)       # Regression coefficients for true links
+beta2 <- c(3, 4)       # Regression coefficients for false links
 sigma1 <- 1             # Standard deviation for the true links
 sigma2 <- 2             # Standard deviation for the false links
 

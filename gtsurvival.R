@@ -2,8 +2,8 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 # source of helper functions
-source("gtpreprocessing.R")
-source("gtpostprocessing.R")
+source("gtsurvivalpreprocessing.R")
+source("gtsurvivalpostprocessing.R")
 
 fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
 
@@ -101,7 +101,6 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
                   chains = chains, seed = seed)
 
   # Process results based on result_type
-  result <- get_results(p_family, fit, result_type)
+  result <- get_results(p_family, fit, result_type, status_vector = data$status)
   return(result)
 }
-
