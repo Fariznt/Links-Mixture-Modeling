@@ -1,4 +1,5 @@
 library(rstan)
+library(survival)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 # source of helper functions
@@ -6,14 +7,13 @@ source("gtsurvivalpreprocessing.R")
 source("gtsurvivalpostprocessing.R")
 
 fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
-
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
   } else {
     seed <- as.integer(seed)
   }
-  
+
   # Process the results based on the result_type
   if (!(result_type %in% c(0, 1))) {
     stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
@@ -23,17 +23,19 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   if (identical(data, "random")) {
     print("Generating synthetic data...")
     data <- generate_synthetic_data(p_family, seed)
-    print(head(data))  # first few rows of generated data
-    print(dim(data))   # dimensions of generated data
+    print(head(data)) # first few rows of generated data
+    print(dim(data)) # dimensions of generated data
   } else {
     if (!file.exists(data)) {
       stop("Error: The specified CSV file does not exist.")
     } else {
       data <- read.csv(data)
       if (anyNA(data)) {
-        na_locations <- which(is.na(data), arr.ind = TRUE)  # Get row and column locations of NA values
-        stop("Error: NA values found in the data. Locations of NA values:\n", 
-             paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
+        na_locations <- which(is.na(data), arr.ind = TRUE) # Get row and column locations of NA values
+        stop(
+          "Error: NA values found in the data. Locations of NA values:\n",
+          paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n")
+        )
       }
     }
   }
@@ -46,7 +48,7 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   # Ensure the status column is handled
   if (!is.null(status_column)) {
     if (status_column %in% colnames(data)) {
-      data$status <- ifelse(data[[status_column]] == 0, 0, 1)  # 0 if censored, 1 if event timed out
+      data$status <- ifelse(data[[status_column]] == 0, 0, 1) # 0 if censored, 1 if event timed out
     } else {
       stop("The specified status column does not exist in the data.")
     }
@@ -56,9 +58,10 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
 
   # Choose the stan file based on family
   stan_file <- switch(p_family,
-                      "weibull" = "gtweibull.stan",
-                      "gamma" = "gtgamma.stan",
-                      stop("Unknown family! Choose from: 'weibull' or 'gamma'"))
+    "weibull" = "gtweibull.stan",
+    "gamma" = "gtgamma.stan",
+    stop("Unknown family! Choose from: 'weibull' or 'gamma'")
+  )
 
   # Prepare the data for Stan model
   if (ncol(data) <= 1) {
@@ -66,41 +69,55 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   }
 
   # Handle the formula & prepare the data
-  model_frame <- model.frame(formula, data)
-  y <- model.response(model_frame)
-  X <- model.matrix(formula, model_frame)[, -1]
+  surv_obj <- eval(formula[[2]], envir = data)
+  y <- surv_obj[, "time"]
+  status <- surv_obj[, "status"]
   
-  # Add truncation if truncation = 1
-  if (truncation == 1) {
-    truncation_lower <- 0       # lower truncation bound
-    truncation_upper <- max(y)  # upper truncation bound
-    stan_data <- list(
-      N = nrow(data),
-      K = ncol(data) - 1,
-      X = X,
-      y = y,
-      truncation_lower = truncation_lower,
-      truncation_upper = truncation_upper,
-      status = data$status  # Include the status column for the model
-    )
-  } else {
-    stan_data <- list(
-      N = nrow(data),
-      K = ncol(data) - 1,
-      X = X,
-      y = y,
-      status = data$status  # Include the status column for the model
-    )
+  # Create design matrix (remove intercept if present)
+  X <- model.matrix(formula, data)
+  if ("(Intercept)" %in% colnames(X)) {
+    X <- X[, -1, drop = FALSE]  # Remove intercept
   }
+
+  # Prepare Stan data
+  stan_data <- list(
+    N = nrow(data),
+    K = ncol(X),
+    X = X,
+    y = y,
+    status = status,
+    use_truncation = ifelse(truncation == 1, 1, 0),
+    truncation_lower = if(truncation == 1) 0 else 0.1,
+    truncation_upper = if(truncation == 1) max(y) else max(y)*2
+  )
 
   # Load the Stan model
   stan_model <- rstan::stan_model(file = stan_file)
 
   # Fit the model using sampling
-  fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, 
-                  chains = chains, seed = seed)
+  fit <- sampling(stan_model,
+    data = stan_data, iter = iterations, warmup = burning_iterations,
+    chains = chains, seed = seed
+  )
+
+  posterior <- extract(fit)
+  print(names(posterior)) # Check the parameters available
 
   # Process results based on result_type
   result <- get_results(p_family, fit, result_type, status_vector = data$status)
   return(result)
 }
+
+# EXAMPLE RUN 
+result <- fit_survival_model(
+  formula = Surv(y, status) ~ X2,
+  p_family = "weibull",
+  data = "random",
+  result_type = 1,
+  iterations = 500,
+  burning_iterations = 250,
+  chains = 2,
+  seed = "random",
+  truncation = 0,
+  status_column = "status" 
+)
