@@ -80,10 +80,12 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     stop("Please specify the 'status_column' parameter.")
   }
   
+  pkg_path <- system.file(package = "LinksMixtureModeling")
+  
   # Choose the stan file based on family
   stan_file <- switch(p_family,
-                      "weibull" = system.file("stan", "gtweibull.stan", package = "LinksMixtureModeling"),
-                      "gamma" = system.file("stan", "gtgamma.stan", package = "LinksMixtureModeling"),
+                      "weibull" = file.path(pkg_path, "stan", "gtweibull.stan"),
+                      "gamma" = file.path(pkg_path, "stan", "gtgamma.stan"),
                       stop("Unknown family! Choose from: 'weibull' or 'gamma'")
   )
   
