@@ -82,8 +82,8 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   
   # Choose the stan file based on family
   stan_file <- switch(p_family,
-                      "weibull" = "gtweibull.stan",
-                      "gamma" = "gtgamma.stan",
+                      "weibull" = system.file("stan", "gtweibull.stan", package = "LinksMixtureModeling"),
+                      "gamma" = system.file("stan", "gtgamma.stan", package = "LinksMixtureModeling")
                       stop("Unknown family! Choose from: 'weibull' or 'gamma'")
   )
   
