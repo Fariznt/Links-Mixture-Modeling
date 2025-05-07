@@ -19,7 +19,7 @@ NULL
 #' @param seed Random seed
 #' @return A data frame with synthetic data
 #' @keywords internal
-generate_synthetic_data <- function(family, seed) {
+generate_synthetic_mixture_data <- function(family, seed) {
   set.seed(seed)
   
   N <- 200
@@ -366,7 +366,7 @@ generate_stan <- function(components, formula, data) {
 #' @param return_type 0 for matrix output, 1 for posterior samples
 #' @return Processed results
 #' @keywords internal
-get_results <- function(family, fit, return_type) {
+get_mixture_results <- function(family, fit, return_type) {
   posterior <- extract(fit)
   z_samples <- posterior$z            # get z-samples from fit
   beta1.p <- posterior$beta1          # get beta1 from fit

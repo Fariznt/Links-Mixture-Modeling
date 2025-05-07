@@ -5,7 +5,7 @@
 #' @return A data frame with synthetic data
 #' @keywords internal
 #' 
-generate_synthetic_data <- function(family, seed) {
+generate_synthetic_survival_data <- function(family, seed) {
   set.seed(seed)
   N <- 200
   X <- cbind(1, runif(N, -2, 2)) # Intercept and 1 covariate
@@ -69,7 +69,7 @@ generate_synthetic_data <- function(family, seed) {
 #' @param status_vector vector for status column
 #' @return Processed results
 #' @keywords internal
-get_results <- function(family, fit, return_type = 0, status_vector = NULL) {
+get_survival_results <- function(family, fit, return_type = 0, status_vector = NULL) {
   posterior <- extract(fit)
 
   # Core parameters

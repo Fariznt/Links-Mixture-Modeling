@@ -38,7 +38,7 @@ fit_model <- function(formula, p_family, data, components, result_type = 0, iter
   # Check what type of data should be loaded & handle NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
-    data <- generate_synthetic_data(p_family, seed)
+    data <- generate_synthetic_mixture_data(p_family, seed)
     print(head(data))  # first few rows of generated data
     print(dim(data))   # dimensions of generated data
   } else {
@@ -87,7 +87,7 @@ fit_model <- function(formula, p_family, data, components, result_type = 0, iter
                   chains = chains, seed = seed)
 
   # Process results based on result_type
-  result <- get_results(p_family, fit, result_type)
+  result <- get_mixture_results(p_family, fit, result_type)
   return(result)
 }
 
