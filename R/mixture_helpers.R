@@ -1,18 +1,119 @@
-library(rstan)
-rstan_options(auto_write = TRUE)
-options(mc.cores = parallel::detectCores())
-# source of helper functions
-source("gtpreprocessing.R")
-source("gtpostprocessing.R")
+#' Fits Bayesian mixture models using Stan with various distribution families (package loader)
+#' @keywords internal 
+#' "_PACKAGE"
+#' @name LinksMixtureModeling
+#' @import rstan
+#' @importFrom stats model.frame model.response model.matrix
+#' @importFrom utils read.csv
+NULL
+
+.onLoad <- function(libname, pkgname) {
+  rstan::rstan_options(auto_write = TRUE)
+  options(mc.cores = parallel::detectCores())
+}
 
 
+#' Creates synthetic data for testing mixture models.
+#'
+#' @param family Distribution family ("linear", "logistic", "poisson", "gamma")
+#' @param seed Random seed
+#' @return A data frame with synthetic data
+#' @keywords internal
+generate_synthetic_data <- function(family, seed) {
+  set.seed(seed)
+  
+  N <- 200
+  K <- 2
+  
+  if (family == "linear") {
+    # LINEAR data generation
+    beta1 <- c(1, 2)
+    beta2 <- c(3, 4)
+    sigma1 <- 1
+    sigma2 <- 2
+    
+    X <- cbind(1, runif(N, -2, 2))
+    z <- rbinom(N, size = 1, prob = 0.8) + 1  # true link (z=1) or false link (z=2)
+    z <- ifelse(z == 1, 0, 1)
+    y <- numeric(N)
+    
+    for (i in 1:N) {
+      if (z[i] == 1) {
+        y[i] <- rnorm(1, mean = sum(X[i, ] * beta1), sd = sigma1)
+      } else {
+        y[i] <- rnorm(1, mean = sum(X[i, ] * beta2), sd = sigma2)
+      }
+    }
+    
+  } else if (family == "logistic") {
+    # LOGISTIC data generation
+    beta1 <- c(0.5, -1)
+    beta2 <- c(0.8, 1)
+    X <- matrix(rnorm(N * K), nrow = N, ncol = K)
+    z <- rbinom(N, size = 1, prob = 0.6) + 1
+    logit <- function(x) exp(x) / (1 + exp(x))
+    y <- numeric(N)
+    
+    for (i in 1:N) {
+      if (z[i] == 1) {
+        y[i] <- rbinom(1, 1, prob = logit(sum(X[i, ] * beta1)))
+      } else {
+        y[i] <- rbinom(1, 1, prob = logit(sum(X[i, ] * beta2)))
+      }
+    }
+    
+  } else if (family == "poisson") {
+    # POISSON data generation
+    beta1 <- c(1, 2)
+    beta2 <- c(2, 3)
+    X <- cbind(1, runif(N, -2, 2))
+    lambda1 <- exp(X %*% beta1)
+    lambda2 <- exp(X %*% beta2)
+    z <- rbinom(N, 1, 0.6)
+    y <- ifelse(z == 1, rpois(N, lambda1), rpois(N, lambda2))
+    
+  } else if (family == "gamma") {
+    # GAMMA data generation
+    beta1 <- c(0.5, 1.2)
+    phi1 <- 5
+    beta2 <- c(2.0, -0.8)
+    phi2 <- 2
+    X <- cbind(1, runif(N, -2, 2))
+    z <- rbinom(N, 1, 0.6)
+    y <- numeric(N)
+    
+    for (i in 1:N) {
+      if (z[i] == 1) {
+        mu <- exp(X[i, ] %*% beta1)
+        y[i] <- rgamma(1, shape = phi1, rate = phi1 / mu)
+      } else {
+        mu <- exp(X[i, ] %*% beta2)
+        y[i] <- rgamma(1, shape = phi2, rate = phi2 / mu)
+      }
+    }
+    
+  } else {
+    stop("Unknown family type. Choose 'linear', 'logistic', 'poisson', or 'gamma'.")
+  }
+  
+  return(data.frame(X, y))
+}
+
+
+#' Generate stan code for mixture models
+#'
+#' @param components Vector of component types
+#' @param formula Model formula
+#' @param data Input data
+#' @return Path to generated Stan file
+#' @keywords internal
 generate_stan <- function(components, formula, data) {
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
-    model_frame <- model.frame(formula, data)
-    y <- model.response(model_frame)
-    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]
+    model_frame <- stats::model.frame(formula, data)
+    y <- stats::model.response(model_frame)
+    X <- stats::model.matrix(formula, model_frame)[, -1, drop = FALSE]
     K <- ncol(X)
     N <- nrow(X)
     
@@ -257,97 +358,84 @@ generate_stan <- function(components, formula, data) {
   }
 }
 
-# main wrapper function
-fit_model <- function(formula, p_family, data, components = NULL, result_type = 0, iterations = 10000, burning_iterations = 1000, chains = 2, seed = 123) {
+
+#' Process model results
+#'
+#' @param family Distribution family
+#' @param fit Stan fit object
+#' @param return_type 0 for matrix output, 1 for posterior samples
+#' @return Processed results
+#' @keywords internal
+get_results <- function(family, fit, return_type) {
+  posterior <- extract(fit)
+  z_samples <- posterior$z            # get z-samples from fit
+  beta1.p <- posterior$beta1          # get beta1 from fit
+  beta2.p <- posterior$beta2          # get bata2 from fit
   
-  # Parse seed and generate random if "random" passed in
-  if (seed == "random") {
-    seed <- sample.int(1e6, 1)
+  if (family == "gamma") {
+    phi1.p <- posterior$phi1
+    phi2.p <- posterior$phi2
   } else {
-    seed <- as.integer(seed)
-  }
-  
-  # Process the results based on the result_type
-  if (!(result_type %in% c(0, 1))) {
-    stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
+    phi1.p <- NULL
+    phi2.p <- NULL
   }
 
-  # Check what type of data should be loaded & handle NA values
-  if (identical(data, "random")) {
-    print("Generating synthetic data...")
-    data <- generate_synthetic_data(p_family, seed)
-    print(head(data))  # first few rows of generated data
-    print(dim(data))   # dimensions of generated data
-  } else {
-    if (!file.exists(data)) {
-      stop("Error: The specified CSV file does not exist.")
-    } else {
-      data <- read.csv(data)
-      if (anyNA(data)) {
-        na_locations <- which(is.na(data), arr.ind = TRUE)  # Get row and column locations of NA values
-        stop("Error: NA values found in the data. Locations of NA values:\n", 
-             paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
+  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
+  stop("Error: Missing expected parameters in posterior")
+  }
+
+  # helper function for flipping z_samples and processing params
+  process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
+    # Flip z_samples (0 -> 1, 1 -> 0)
+    for (i in seq_len(nrow(z_samples))) {
+      z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
+      if (mean(z_samples[i, ]) < 0.5) {
+        z_samples[i, ] <- 1 - z_samples[i, ]
+        temp <- beta1.p[i, ]
+        beta1.p[i, ] <- beta2.p[i, ]
+        beta2.p[i, ] <- temp
+
+        if (!is.null(phi1.p) && !is.null(phi2.p)) {  # Check if family is gamma
+          temp_phi <- phi1.p[i]
+          phi1.p[i] <- phi2.p[i]
+          phi2.p[i] <- temp_phi
+        }
       }
     }
+    
+      # Calculate statistics
+      mean_beta1 <- apply(beta1.p, 2, mean)
+      mean_beta2 <- apply(beta2.p, 2, mean)
+      var_beta1 <- apply(beta1.p, 2, var)
+      var_beta2 <- apply(beta2.p, 2, var)
+      ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+      ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+
+    if (return_type == 0) {
+      print("Printing z_samples matrix:")
+      print(z_samples)  # Print the matrix z_samples
+    } else if (return_type == 1) {
+      print("Printing betas and related statistics:")
+      # Print each beta with a descriptive label
+      cat("Mean beta1: ", mean_beta1, "\n")
+      cat("Mean beta2: ", mean_beta2, "\n")
+      cat("Variance beta1: ", var_beta1, "\n")
+      cat("Variance beta2: ", var_beta2, "\n")
+      cat("95% CI beta1: ", ci_beta1, "\n")
+      cat("95% CI beta2: ", ci_beta2, "\n")
+    }
+    
+    return(list(
+        z_samples = z_samples,
+        mean_beta1 = mean_beta1,
+        mean_beta2 = mean_beta2,
+        var_beta1 = var_beta1,
+        var_beta2 = var_beta2,
+        ci_beta1 = ci_beta1,
+        ci_beta2 = ci_beta2
+      ))
   }
-
-  # Check for missing data
-  if (!is.data.frame(data) || nrow(data) == 0) {
-    stop("The input data is not a valid data frame or is empty.")
-  }
-
-  # Check if need to generate stan file
-  if (!is.null(components)) {
-    stan_file <- generate_stan(components, formula, data)
-  } else {
-    stan_file <- switch(p_family,
-                        "linear" = "gtlinear.stan",
-                        "logistic" = "gtlogistic.stan",
-                        "poisson" = "gtpoisson.stan",
-                        "gamma" = "gtgamma.stan",
-                        stop("Unknown family! Choose from: 'linear', 'logistic', 'poisson', or 'gamma'"))
-  }
-
-  # Prepare the data
-  if (ncol(data) <= 1) {
-    stop("Data should have at least one predictor and one response variable.")
-  }
-  
-  #Handle the formula & prepare the data
-  model_frame <- model.frame(formula, data)
-  y <- model.response(model_frame)
-  X <- model.matrix(formula, model_frame)[, -1]
-  
-  stan_data <- list(
-    N = nrow(data),
-    K = ncol(data) - 1,
-    X = X,
-    y = y
-  )
-
-  # Load the Stan model
-  stan_model <- rstan::stan_model(file = stan_file)
-
-  # Fit the model using sampling
-  fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, 
-                  chains = chains, seed = seed)
-
-  # Process results based on result_type
-  result <- get_results(p_family, fit, result_type)
-  return(result)
+  # Call process_parameters helper function
+  result_list <- process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)
+  return(result_list)
 }
-
-
-##########################################################
-# Linear mixture fit test with random data
-
-formula <- y ~ X1 + X2
-fit_result <- fit_model(formula = formula,
-                        p_family = "linear",
-                        data = "random",
-                        components = c("linear", "linear"),
-                        result_type = 1,
-                        iterations = 3000,
-                        burning_iterations = 1000,
-                        chains = 2,
-                        seed = 123)

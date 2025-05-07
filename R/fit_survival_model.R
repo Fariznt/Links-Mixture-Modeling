@@ -1,10 +1,34 @@
-library(rstan)
-library(survival)
-rstan_options(auto_write = TRUE)
-options(mc.cores = parallel::detectCores())
-# source of helper functions
-source("gtsurvivalpreprocessing.R")
-source("gtsurvivalpostprocessing.R")
+#' Fits a survival model using Stan with various distribution families.
+#'
+#' @param formula Model formula (e.g., y ~ x1 + x2)
+#' @param p_family Distribution family ("weibull", "gamma")
+#' @param data Input data frame or "random" for synthetic data
+#' @param result_type 0 for matrix output, 1 for posterior samples,
+#' @param iterations Total number of MCMC iterations, default is
+#' @param burning_iterations Number of burn-in iterations
+#' @param chains Number of MCMC chains
+#' @param seed Random seed (integer or "random")
+#' @param truncation 0 or 1 indicating whether to use truncated distributions
+#' @param status_column indicates which column is the status one
+#' @return Results depending on result_type
+#' @export
+#' @importFrom rstan stan_model sampling
+#' @importFrom stats model.frame model.response model.matrix
+#' @importFrom utils read.csv
+#' @examples
+#' \dontrun{
+#' # Weibull mixture example
+#' fit <- fit_survival_model(y ~ x1 + x2, 
+#' "weibull", 
+#' data = "random",
+#' result_type = 1,
+#' iterations = 500,
+#' burning_iterations = 250,
+#' chains = 2,
+#' seed = "random",
+#' truncation = 0,
+#' status_column = "status")
+#' }
 
 fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
   # Parse seed and generate random if "random" passed in
@@ -13,12 +37,12 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   } else {
     seed <- as.integer(seed)
   }
-
+  
   # Process the results based on the result_type
   if (!(result_type %in% c(0, 1))) {
     stop("Invalid result_type! Choose 0 for matrix or 1 for posterior samples.")
   }
-
+  
   # Check what type of data should be loaded & handle NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
@@ -39,12 +63,12 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
       }
     }
   }
-
+  
   # Check for missing data
   if (!is.data.frame(data) || nrow(data) == 0) {
     stop("The input data is not a valid data frame or is empty.")
   }
-
+  
   # Ensure the status column is handled
   if (!is.null(status_column)) {
     if (status_column %in% colnames(data)) {
@@ -55,19 +79,19 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   } else {
     stop("Please specify the 'status_column' parameter.")
   }
-
+  
   # Choose the stan file based on family
   stan_file <- switch(p_family,
-    "weibull" = "gtweibull.stan",
-    "gamma" = "gtgamma.stan",
-    stop("Unknown family! Choose from: 'weibull' or 'gamma'")
+                      "weibull" = "gtweibull.stan",
+                      "gamma" = "gtgamma.stan",
+                      stop("Unknown family! Choose from: 'weibull' or 'gamma'")
   )
-
+  
   # Prepare the data for Stan model
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")
   }
-
+  
   # Handle the formula & prepare the data
   surv_obj <- eval(formula[[2]], envir = data)
   y <- surv_obj[, "time"]
@@ -78,7 +102,7 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   if ("(Intercept)" %in% colnames(X)) {
     X <- X[, -1, drop = FALSE]  # Remove intercept
   }
-
+  
   # Prepare Stan data
   stan_data <- list(
     N = nrow(data),
@@ -90,34 +114,20 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     truncation_lower = if(truncation == 1) 0 else 0.1,
     truncation_upper = if(truncation == 1) max(y) else max(y)*2
   )
-
+  
   # Load the Stan model
   stan_model <- rstan::stan_model(file = stan_file)
-
+  
   # Fit the model using sampling
   fit <- sampling(stan_model,
-    data = stan_data, iter = iterations, warmup = burning_iterations,
-    chains = chains, seed = seed
+                  data = stan_data, iter = iterations, warmup = burning_iterations,
+                  chains = chains, seed = seed
   )
-
+  
   posterior <- extract(fit)
   print(names(posterior)) # Check the parameters available
-
+  
   # Process results based on result_type
   result <- get_results(p_family, fit, result_type, status_vector = data$status)
   return(result)
 }
-
-# EXAMPLE RUN 
-result <- fit_survival_model(
-  formula = Surv(y, status) ~ X2,
-  p_family = "weibull",
-  data = "random",
-  result_type = 1,
-  iterations = 500,
-  burning_iterations = 250,
-  chains = 2,
-  seed = "random",
-  truncation = 0,
-  status_column = "status" 
-)

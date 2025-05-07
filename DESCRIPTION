@@ -1,0 +1,20 @@
+Package: LinksMixtureModeling
+Title: Bayesian Mixture Models with Stan
+Version: 0.1.0
+Authors@R: 
+    person("Morgane", "Pizigo", , "morgane_pizigo@brown.com", role = c("aut", "cre"))
+Description: Implements Bayesian mixture models for linear, logistic,
+    Poisson, gamma, and survival data using Stan.
+License: MIT + file LICENSE
+Imports: 
+    Rcpp,
+    rstan,
+    survival
+LinkingTo: 
+    Rcpp,
+    rstan,
+    StanHeaders
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+SystemRequirements: GNU make
