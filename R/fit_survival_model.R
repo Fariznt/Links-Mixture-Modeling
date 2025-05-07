@@ -15,6 +15,7 @@
 #' @importFrom rstan stan_model sampling
 #' @importFrom stats model.frame model.response model.matrix
 #' @importFrom utils read.csv
+#' @importFrom survival Surv
 #' @examples
 #' \dontrun{
 #' # Weibull mixture example

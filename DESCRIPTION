@@ -7,7 +7,7 @@ Description: Implements Bayesian mixture models for linear, logistic,
     Poisson, gamma, and survival data using Stan.
 License: MIT + file LICENSE
 Imports: 
-    survival (>= 3.2.0),
+    survival,
     Rcpp,
     rstan,
     survival
