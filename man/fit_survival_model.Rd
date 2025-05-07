@@ -47,8 +47,9 @@ Fits a survival model using Stan with various distribution families.
 \examples{
 \dontrun{
 # Weibull mixture example
-fit <- fit_survival_model(y ~ x1 + x2, 
-"weibull", 
+surv_fit <- LinksMixtureModeling::fit_survival_model(
+formula = Surv(y, status) ~ X2, 
+p_family = "weibull",
 data = "random",
 result_type = 1,
 iterations = 500,
@@ -56,6 +57,5 @@ burning_iterations = 250,
 chains = 2,
 seed = "random",
 truncation = 0,
-status_column = "status")
-}
+status_column = "status") }
 }
