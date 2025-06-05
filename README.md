@@ -37,7 +37,8 @@ For survival models specifically:
 
 # Function Summary
 
-[gtwrapper.R]
+```r
+# [gtwrapper.R]
 fit_model <- function(
   formula,                    # Model formula (e.g., y ~ X1 + X2)
   p_family,                   # Distribution family: "linear", "logistic", "poisson", or "gamma"
@@ -49,8 +50,10 @@ fit_model <- function(
   chains = 2,                 # Number of MCMC chains
   seed = 123                  # Random seed ("random" or integer)
 ) 
-  """
+```
+
   Fit a Bayesian regression model with optional mixture components
+  
   
   Fits various GLMs using Stan with support for:
   - Linear, logistic, Poisson, and Gamma regression
