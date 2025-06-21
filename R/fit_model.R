@@ -56,6 +56,8 @@ fit_model <-
   }
     
   # TODO: more complex validation of prior argument
+  # TODO: possibly, make it so that if a scalar is passed in when
+  # a length 2 vector was expected, automatically correct above
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -111,6 +113,7 @@ fit_model <-
     K = ncol(data) - 1,
     X = X,
     y = y
+    
   )
 
   # Load the Stan model
