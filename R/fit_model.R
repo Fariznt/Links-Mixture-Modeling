@@ -34,16 +34,16 @@ fit_model <-
            p_family, 
            data, 
            components, 
-           prior = NULL,
+           hyperparameters = NULL,
            result_type = 0, 
            iterations = 10000, 
            burning_iterations = 1000, 
            chains = 2, 
            seed = 123) {
   
-  # Set default prior values if priors not passed in
-  if (is.null(prior)) {
-    prior <-
+  # Set default hyperparameter values if not passed in
+  if (is.null(hyperparameters)) {
+    hyperparameters <-
       list(
         mu    = list(mean  = c(0, 0),  sd = c(5, 5)),  # scalar or length-2
         beta  = list(mean  = c(0, 0),  sd = c(5, 5)),         # scalar or length-K
@@ -51,7 +51,7 @@ fit_model <-
         theta = list(alpha = 1,  beta  = 1),     # scalar or length-2
         phi   = list(rate  = 1)                   # only for gamma
       )
-  } else if (!is.list(prior)) { #very simple validation of prior format
+  } else if (!is.list(hyperparameters)) { #very simple validation of prior format
     stop("Invalid argument: 'priors' must be a named list of lists.")
   }
     
