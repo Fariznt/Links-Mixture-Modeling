@@ -8,10 +8,8 @@
 #'   `mu = list(mean, sd)`, `beta = list(mean, sd)`,
 #'   `sigma = list(scale)`, `theta = list(alpha, beta)`,
 #'   `phi = list(rate)` (gamma only).
-#'   Values can be single number or a numeric vector 
-#'   matching the required length (eg. length 2 mu
-#'   vector for linear-linear mixture).  NULL triggers 
-#'   weakly-informative defaults.
+#'   mean, sd, scale, rate are length-2 vectors. NULL or missing
+#'   values triggers weakly-informative defaults.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param burning_iterations Number of burn-in iterations
@@ -40,24 +38,28 @@ fit_model <-
            burning_iterations = 1000, 
            chains = 2, 
            seed = 123) {
+
+  # Define default hyperparameter values
+  defaults <- list(
+    mu    = list(mean  = c(0, 0),   sd    = c(5, 5)),
+    beta  = list(mean  = c(0, 0),   sd    = c(5, 5)),
+    sigma = list(scale = c(2.5, 2.5)),
+    theta = list(alpha = 1,         beta  = 1),
+    phi   = list(rate  = c(1, 1))
+  )
   
   # Set default hyperparameter values if not passed in
-  if (is.null(hyperparameters)) {
-    hyperparameters <-
-      list(
-        mu    = list(mean  = c(0, 0),  sd = c(5, 5)),
-        beta  = list(mean  = c(0, 0),  sd = c(5, 5)),
-        sigma = list(scale = (2.5, 2.5), # location defaults to 0
-        theta = list(alpha = 1,  beta  = 1),
-        phi   = list(rate  = c(1,1))
-      )
-  } else if (!is.list(hyperparameters)) { #very simple validation of prior format
+  if (is.null(hyperparameters)) { # if nothing passed in, use all defaults
+    hyperparameters <- defaults
+  } else if (!is.list(hyperparameters)) { # very simple validation of prior format
     stop("Invalid argument: 'priors' must be a named list of lists.")
+  } else { # use hyperparameters passed in, with default values for missing ones
+    hyperparameters <- utils::modifyList(defaults, hyperparameters)
   }
-    
+  
   # TODO: more complex validation of prior argument
   # TODO: possibly, make it so that if a scalar is passed in when
-  # a length 2 vector was expected, automatically correct above
+  # a length 2 vector was expected, automatically correct it above
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -113,6 +115,8 @@ fit_model <-
     K = ncol(data) - 1,
     X = X,
     y = y
+    
+    # 
     
   )
 
