@@ -45,11 +45,11 @@ fit_model <-
   if (is.null(hyperparameters)) {
     hyperparameters <-
       list(
-        mu    = list(mean  = c(0, 0),  sd = c(5, 5)),  # scalar or length-2
-        beta  = list(mean  = c(0, 0),  sd = c(5, 5)),         # scalar or length-K
-        sigma = list(location = 0, scale = 2.5),          # scalar or length-2
-        theta = list(alpha = 1,  beta  = 1),     # scalar or length-2
-        phi   = list(rate  = 1)                   # only for gamma
+        mu    = list(mean  = c(0, 0),  sd = c(5, 5)),
+        beta  = list(mean  = c(0, 0),  sd = c(5, 5)),
+        sigma = list(scale = (2.5, 2.5), # location defaults to 0
+        theta = list(alpha = 1,  beta  = 1),
+        phi   = list(rate  = c(1,1))
       )
   } else if (!is.list(hyperparameters)) { #very simple validation of prior format
     stop("Invalid argument: 'priors' must be a named list of lists.")
