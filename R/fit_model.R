@@ -4,6 +4,14 @@
 #' @param p_family Distribution family ("linear", "logistic", "poisson", "gamma")
 #' @param data Input data frame or "random" for synthetic data
 #' @param components Vector specifying mixture components (e.g., c("linear", "linear"))
+#' @param prior Named list (or NULL).  Expected keys:
+#'   `mu = list(mean, sd)`, `beta = list(mean, sd)`,
+#'   `sigma = list(scale)`, `theta = list(alpha, beta)`,
+#'   `phi = list(rate)` (gamma only).
+#'   Values can be single number or a numeric vector 
+#'   matching the required length (eg. length 2 mu
+#'   vector for linear-linear mixture).  NULL triggers 
+#'   weakly-informative defaults.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param burning_iterations Number of burn-in iterations
@@ -21,7 +29,31 @@
 #'                 components = c("linear", "linear"))
 #' }
 
-fit_model <- function(formula, p_family, data, components, result_type = 0, iterations = 10000, burning_iterations = 1000, chains = 2, seed = 123) {
+fit_model <- 
+  function(formula, 
+           p_family, 
+           data, 
+           components, 
+           priors = NULL,
+           result_type = 0, 
+           iterations = 10000, 
+           burning_iterations = 1000, 
+           chains = 2, 
+           seed = 123) {
+  
+  # Set default prior values if priors not passed in
+  if (is.null(priors)) {
+    priors <-
+      list(
+        mu    = list(mean  = c(0, 0),  sd = c(5, 5)),  # scalar or length-2
+        beta  = list(mean  = c(0, 0),  sd = c(5, 5)),         # scalar or length-K
+        sigma = list(location = 0, scale = 2.5),          # scalar or length-2
+        theta = list(alpha = 1,  beta  = 1),     # scalar or length-2
+        phi   = list(rate  = 1)                   # only for gamma
+      )
+  } else if (!is.list(priors)) { #very simple validation of prior format
+    stop("Invalid argument: 'priors' must be a named list of lists.")
+  }
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
