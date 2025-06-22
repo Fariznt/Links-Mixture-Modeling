@@ -8,7 +8,9 @@
 #'   `mu = list(mean, sd)`, `beta = list(mean, sd)`,
 #'   `sigma = list(scale)`, `theta = list(alpha, beta)`,
 #'   `phi = list(rate)` (gamma only).
-#'   mean, sd, scale, rate are length-2 vectors. NULL or missing
+#'   mean, sd, scale, rate are length-2 vectors, where each value corresponds to
+#'   one of the two components in the mixture. If a scalar is passed, it
+#'   is used for both components. NULL or missing
 #'   values triggers weakly-informative defaults.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
@@ -41,12 +43,13 @@ fit_model <-
 
   # Define default hyperparameter values
   defaults <- list(
-    mu    = list(mean  = c(0, 0),   sd    = c(5, 5)),
-    beta  = list(mean  = c(0, 0),   sd    = c(5, 5)),
+    mu    = list(mean  = c(0, 0), sd = c(5, 5)),
+    beta  = list(mean  = c(0, 0), sd = c(5, 5)),
     sigma = list(scale = c(2.5, 2.5)),
-    theta = list(alpha = 1,         beta  = 1),
+    theta = list(alpha = 1, beta  = 1),
     phi   = list(rate  = c(1, 1))
   )
+  
   
   # Set default hyperparameter values if not passed in
   if (is.null(hyperparameters)) { # if nothing passed in, use all defaults
@@ -58,8 +61,7 @@ fit_model <-
   }
   
   # TODO: more complex validation of prior argument
-  # TODO: possibly, make it so that if a scalar is passed in when
-  # a length 2 vector was expected, automatically correct it above
+
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -114,9 +116,15 @@ fit_model <-
     N = nrow(data),
     K = ncol(data) - 1,
     X = X,
-    y = y
+    y = y #,
     
-    # 
+    # hyperparameters for prior
+    #mu1 = hyperparameters$mu$mean[1],
+    #mu2 = hyperparameters$mu$mean[2],
+    #beta1 = hyperparameters$beta$mean[1],
+    #beta2 = hyperparameters$beta$mean[2],
+    
+    
     
   )
 
