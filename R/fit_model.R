@@ -111,21 +111,78 @@ fit_model <-
   model_frame <- model.frame(formula, data)
   y <- model.response(model_frame)
   X <- model.matrix(formula, model_frame)[, -1]
+
+  # Prepare hyperparameter data
+  # -- mu
+  if (is.list(hyperparameters$mu$mean)) {
+    mu1_loc <- hyperparameters$mu$mean[1]
+    mu2_loc <- hyperparameters$mu$mean[2]
+  } else {
+    mu1_loc <- mu2_loc <- hyperparameters$mu$mean
+  }
+  if (is.list(hyperparameters$mu$sd)) {
+    mu1_scale <- hyperparameters$mu$sd[1]
+    mu2_scale <- hyperparameters$mu$sd[2]
+  } else {
+    mu1_scale <- mu2_scale <- hyperparameters$mu$sd
+  }
+  # -- beta
+  if (is.list(hyperparameters$beta$mean)) {
+    beta1_loc   <- hyperparameters$beta$mean[1]
+    beta2_loc   <- hyperparameters$beta$mean[2]
+  } else {
+    beta1_loc   <- beta2_loc <- hyperparameters$beta$mean
+  }
+  if (is.list(hyperparameters$beta$sd)) {
+    beta1_scale <- hyperparameters$beta$sd[1]
+    beta2_scale <- hyperparameters$beta$sd[2]
+  } else {
+    beta1_scale <- beta2_scale <- hyperparameters$beta$sd
+  }
+  # -- sigma (scale-only)
+  if (is.list(hyperparameters$sigma$scale)) {
+    sigma1_scale <- hyperparameters$sigma$scale[1]
+    sigma2_scale <- hyperparameters$sigma$scale[2]
+  } else {
+    sigma1_scale <- sigma2_scale <- hyperparameters$sigma$scale
+  }
+  
+  # -- theta (Dirichlet-type concentration parameters)
+  theta_alpha <- hyperparameters$theta$alpha
+  theta_beta  <- hyperparameters$theta$beta
+  
+  # -- phi (Gamma rate parameters)
+  if (is.list(hyperparameters$phi$rate)) {
+    phi1_rate <- hyperparameters$phi$rate[1]
+    phi2_rate <- hyperparameters$phi$rate[2]
+  } else {
+    phi1_rate <- phi2_rate <- hyperparameters$phi$rate
+  }
   
   stan_data <- list(
     N = nrow(data),
     K = ncol(data) - 1,
     X = X,
-    y = y #,
+    y = y,
     
-    # hyperparameters for prior
-    #mu1 = hyperparameters$mu$mean[1],
-    #mu2 = hyperparameters$mu$mean[2],
-    #beta1 = hyperparameters$beta$mean[1],
-    #beta2 = hyperparameters$beta$mean[2],
+    mu1_loc = mu1_loc,
+    mu2_loc = mu2_loc,
+    mu1_scale = mu1_scale,
+    mu2_scale = mu2_scale,
     
+    beta1_loc    = beta1_loc,
+    beta2_loc    = beta2_loc,
+    beta1_scale  = beta1_scale,
+    beta2_scale  = beta2_scale,
     
+    sigma1_scale = sigma1_scale,
+    sigma2_scale = sigma2_scale,
     
+    theta_alpha  = theta_alpha,
+    theta_beta   = theta_beta,
+    
+    phi1_rate    = phi1_rate,
+    phi2_rate    = phi2_rate
   )
 
   # Load the Stan model
