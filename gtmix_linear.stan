@@ -3,6 +3,19 @@ data {
   int<lower=1> K;             // Number of predictors
   matrix[N, K] X;             // Predictor matrix
   vector[N] y;                // Response vector
+  // prior hyperparameters
+  real mu1_loc;
+  real mu2_loc;
+  real<lower=0> mu1_scale;
+  real<lower=0> mu2_scale;
+  real beta1_loc;
+  real beta2_loc;
+  real<lower=0> beta1_scale;
+  real<lower=0> beta2_scale;
+  real<lower=0> sigma1_scale;
+  real<lower=0> sigma2_scale;
+  real<lower=0> theta_alpha;
+  real<lower=0> theta_beta;
 }
 parameters {
   real<lower=0, upper=1> theta; // Mixture weight for the first component
@@ -15,13 +28,13 @@ parameters {
 }
 model {
   // Priors
-  mu1 ~ normal(0, 5);
-  mu2 ~ normal(0, 5);
-  sigma1 ~ cauchy(0, 2.5);
-  sigma2 ~ cauchy(0, 2.5);
-  beta1 ~ normal(0, 5);
-  beta2 ~ normal(0, 5);
-  theta ~ beta(1, 1);          
+  mu1 ~ normal(mu1_loc, mu1_scale);
+  mu2 ~ normal(mu2_loc, mu2_scale);
+  sigma1 ~ cauchy(0, sigma1_scale);
+  sigma2 ~ cauchy(0, sigma2_scale);
+  beta1 ~ normal(beta1_loc, beta1_scale);
+  beta2 ~ normal(beta2_loc, beta2_scale);
+  theta ~ beta(theta_alpha, theta_beta);
 
   // Mixture model likelihood
   for (n in 1:N) {

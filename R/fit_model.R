@@ -60,9 +60,6 @@ fit_model <-
     hyperparameters <- utils::modifyList(defaults, hyperparameters)
   }
   
-  # TODO: more complex validation of prior argument
-
-  
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
@@ -114,40 +111,40 @@ fit_model <-
 
   # Prepare hyperparameter data
   # -- mu
-  if (is.list(hyperparameters$mu$mean)) {
+  if (length(hyperparameters$mu$mean) == 2) {
     mu1_loc <- hyperparameters$mu$mean[1]
     mu2_loc <- hyperparameters$mu$mean[2]
   } else {
     mu1_loc <- mu2_loc <- hyperparameters$mu$mean
   }
-  if (is.list(hyperparameters$mu$sd)) {
+  if (length(hyperparameters$mu$sd) == 2) {
     mu1_scale <- hyperparameters$mu$sd[1]
     mu2_scale <- hyperparameters$mu$sd[2]
   } else {
     mu1_scale <- mu2_scale <- hyperparameters$mu$sd
   }
   # -- beta
-  if (is.list(hyperparameters$beta$mean)) {
+  if (length(hyperparameters$beta$mean) == 2) {
     beta1_loc   <- hyperparameters$beta$mean[1]
     beta2_loc   <- hyperparameters$beta$mean[2]
   } else {
     beta1_loc   <- beta2_loc <- hyperparameters$beta$mean
   }
-  if (is.list(hyperparameters$beta$sd)) {
+  if (length(hyperparameters$beta$sd) == 2) {
     beta1_scale <- hyperparameters$beta$sd[1]
     beta2_scale <- hyperparameters$beta$sd[2]
   } else {
     beta1_scale <- beta2_scale <- hyperparameters$beta$sd
   }
   # -- sigma (scale-only)
-  if (is.list(hyperparameters$sigma$scale)) {
+  if (length(hyperparameters$sigma$scale) == 2) {
     sigma1_scale <- hyperparameters$sigma$scale[1]
     sigma2_scale <- hyperparameters$sigma$scale[2]
   } else {
     sigma1_scale <- sigma2_scale <- hyperparameters$sigma$scale
   }
   
-  # -- theta (Dirichlet-type concentration parameters)
+  # -- theta
   theta_alpha <- hyperparameters$theta$alpha
   theta_beta  <- hyperparameters$theta$beta
   
