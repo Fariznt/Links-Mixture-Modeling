@@ -31,7 +31,37 @@
 #' truncation = 0,
 #' status_column = "status") }
 
-fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
+fit_survival_model <- 
+  function(formula, 
+           p_family, 
+           data, 
+           hyperparameters = NULL,
+           result_type, 
+           iterations, 
+           burning_iterations, 
+           chains, 
+           seed, 
+           truncation = 0, 
+           status_column = NULL) {
+    
+    # Define default hyperparameter values
+    defaults <- list(
+      beta  = list(mean  = c(0, 0), sd = c(5, 5)),
+      theta = list(alpha = 1, beta  = 1),
+      phi   = list(rate  = c(1, 1)),
+      shape = list(alpha = c(2, 2), beta = c(1, 1)), # alpha is shape, beta is rate
+      scale = list(alpha = c(2, 2), beta = c(1, 1)) # alpha is shape, beta is rate
+    )
+    
+    # Set default hyperparameter values if not passed in
+    if (is.null(hyperparameters)) { # if nothing passed in, use all defaults
+      hyperparameters <- defaults
+    } else if (!is.list(hyperparameters)) { # very simple validation of prior format
+      stop("Invalid argument: 'priors' must be a named list of lists.")
+    } else { # use hyperparameters passed in, with default values for missing ones
+      hyperparameters <- utils::modifyList(defaults, hyperparameters)
+    }
+    
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
@@ -106,7 +136,58 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     X <- X[, -1, drop = FALSE]  # Remove intercept
   }
   
-  # Prepare Stan data
+  # Prepare hyperparameter data
+  # -- beta
+  if (length(hyperparameters$beta$mean) == 2) {
+    beta1_loc   <- hyperparameters$beta$mean[1]
+    beta2_loc   <- hyperparameters$beta$mean[2]
+  } else {
+    beta1_loc   <- beta2_loc <- hyperparameters$beta$mean
+  }
+  if (length(hyperparameters$beta$sd) == 2) {
+    beta1_scale <- hyperparameters$beta$sd[1]
+    beta2_scale <- hyperparameters$beta$sd[2]
+  } else {
+    beta1_scale <- beta2_scale <- hyperparameters$beta$sd
+  }
+  # -- theta
+  theta_alpha <- hyperparameters$theta$alpha
+  theta_beta  <- hyperparameters$theta$beta
+  # -- phi
+  if (is.list(hyperparameters$phi$rate)) {
+    phi1_rate <- hyperparameters$phi$rate[1]
+    phi2_rate <- hyperparameters$phi$rate[2]
+  } else {
+    phi1_rate <- phi2_rate <- hyperparameters$phi$rate
+  }
+  # -- shape
+  if (length(hyperparameters$shape$alpha) == 2) {
+    shape1_alpha   <- hyperparameters$shape$alpha[1]
+    shape2_alpha   <- hyperparameters$shape$alpha[2]
+  } else {
+    shape1_alpha   <- shape2_alpha <- hyperparameters$shape$alpha
+  }
+  if (length(hyperparameters$shape$beta) == 2) {
+    shape1_beta   <- hyperparameters$shape$beta[1]
+    shape2_beta   <- hyperparameters$shape$beta[2]
+  } else {
+    shape1_beta <- shape2_beta <- hyperparameters$shape$beta
+  }
+  # -- scale
+  if (length(hyperparameters$scale$alpha) == 2) {
+    scale1_alpha   <- hyperparameters$scale$alpha[1]
+    scale2_alpha   <- hyperparameters$scale$alpha[2]
+  } else {
+    scale1_alpha   <- scale2_alpha <- hyperparameters$scale$alpha
+  }
+  if (length(hyperparameters$scale$beta) == 2) {
+    scale1_beta   <- hyperparameters$scale$beta[1]
+    scale2_beta   <- hyperparameters$scale$beta[2]
+  } else {
+    scale1_beta   <- scale2_beta <- hyperparameters$scale$beta
+  }
+
+  # Prepare core Stan data
   stan_data <- list(
     N = nrow(data),
     K = ncol(X),
@@ -115,8 +196,38 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     status = status,
     use_truncation = ifelse(truncation == 1, 1, 0),
     truncation_lower = if(truncation == 1) 0 else 0.1,
-    truncation_upper = if(truncation == 1) max(y) else max(y)*2
+    truncation_upper = if(truncation == 1) max(y) else max(y)*2,
+    
+    # prior hyperparameters
+    beta1_loc    = beta1_loc,
+    beta2_loc    = beta2_loc,
+    beta1_scale  = beta1_scale,
+    beta2_scale  = beta2_scale,
+    
+    theta_alpha  = theta_alpha,
+    theta_beta   = theta_beta
   )
+  
+  # Append to stan_data the p_family-specific prior hyperparameters
+  if (p_family == "weibull") {
+    stan_data <- c(stan_data, list(
+      shape1_alpha = shape1_alpha,
+      shape2_alpha = shape2_alpha,
+      shape1_beta = shape1_beta,
+      shape2_beta = shape2_beta,
+      scale1_alpha = scale1_alpha,
+      scale2_alpha = scale2_alpha,
+      scale1_beta = scale1_beta,
+      scale2_beta = scale2_beta
+    ))
+  } else if (p_family == "gamma") {
+    stan_data <- c(stan_data, list(
+      phi1_rate = phi1_rate,
+      phi2_rate = phi2_rate
+    ))
+  } else {
+    stop("Unsupported p_family: ", p_family)
+  }
   
   # Load the Stan model
   stan_model <- rstan::stan_model(file = stan_file)

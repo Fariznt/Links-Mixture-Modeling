@@ -50,7 +50,6 @@ fit_model <-
     phi   = list(rate  = c(1, 1))
   )
   
-  
   # Set default hyperparameter values if not passed in
   if (is.null(hyperparameters)) { # if nothing passed in, use all defaults
     hyperparameters <- defaults
