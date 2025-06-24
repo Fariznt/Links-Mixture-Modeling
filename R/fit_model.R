@@ -4,14 +4,14 @@
 #' @param p_family Distribution family ("linear", "logistic", "poisson", "gamma")
 #' @param data Input data frame or "random" for synthetic data
 #' @param components Vector specifying mixture components (e.g., c("linear", "linear"))
-#' @param prior Named list (or NULL).  Expected keys:
+#' @param hyperparameters Named list (or NULL).  Expected keys:
 #'   `mu = list(mean, sd)`, `beta = list(mean, sd)`,
 #'   `sigma = list(scale)`, `theta = list(alpha, beta)`,
 #'   `phi = list(rate)` (gamma only).
 #'   mean, sd, scale, rate are length-2 vectors, where each value corresponds to
 #'   one of the two components in the mixture. If a scalar is passed, it
 #'   is used for both components. NULL or missing
-#'   values triggers weakly-informative defaults.
+#'   values triggers weakly-informative default priors.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param burning_iterations Number of burn-in iterations

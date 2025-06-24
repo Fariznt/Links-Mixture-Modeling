@@ -3,6 +3,14 @@
 #' @param formula Model formula (e.g., y ~ x1 + x2)
 #' @param p_family Distribution family ("weibull", "gamma")
 #' @param data Input data frame or "random" for synthetic data
+#' @param hyperparameters Named list (or NULL). Expected keys:  
+#'   `beta  = list(mean, sd)`,  
+#'   `theta = list(alpha, beta)`,  
+#'   `phi   = list(rate)` (gamma survival only),  
+#'   `shape = list(alpha, beta)`, `scale = list(alpha, beta)` (weibull survival only).  
+#'   mean, sd, alpha, beta, rate are length-2 vectors (one value per mixture component);  
+#'   if a scalar is supplied it is used for both components.  
+#'   NULL or missing elements trigger weakly-informative default priors.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param burning_iterations Number of burn-in iterations
