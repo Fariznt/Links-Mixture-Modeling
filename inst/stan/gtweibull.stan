@@ -7,6 +7,22 @@ data {
   int<lower=0, upper=1> use_truncation;
   real<lower=0> truncation_lower;
   real<lower=0> truncation_upper;
+  
+  // prior hyperparameters
+  real beta1_loc;
+  real beta2_loc;
+  real<lower=0> beta1_scale;
+  real<lower=0> beta2_scale;
+  real<lower=0> theta_alpha;
+  real<lower=0> theta_beta;
+  real<lower=0> shape1_alpha;
+  real<lower=0> shape2_alpha;
+  real<lower=0> shape1_beta;
+  real<lower=0> shape2_beta;
+  real<lower=0> scale1_alpha;
+  real<lower=0> scale2_alpha;
+  real<lower=0> scale1_beta;
+  real<lower=0> scale2_beta;
 }
 parameters {
   vector[K] beta1;
@@ -18,13 +34,13 @@ parameters {
   real<lower=0, upper=1> theta;
 }
 model {
-  beta1 ~ normal(0, 2);
-  beta2 ~ normal(0, 2);
-  shape1 ~ gamma(2, 1);
-  shape2 ~ gamma(2, 1);
-  scale1 ~ gamma(2, 1);
-  scale2 ~ gamma(2, 1);
-  theta ~ beta(1, 1);
+  beta1 ~ normal(beta1_loc, beta1_scale);
+  beta2 ~ normal(beta2_loc, beta2_scale);
+  shape1 ~ gamma(shape1_alpha, shape1_beta);
+  shape2 ~ gamma(shape2_alpha, shape2_beta);
+  scale1 ~ gamma(scale1_alpha, scale1_beta);
+  scale2 ~ gamma(scale2_alpha, scale2_beta);
+  theta ~ beta(theta_alpha, theta_beta);
   
   for (n in 1 : N) {
     real log_p1 = log(theta);
