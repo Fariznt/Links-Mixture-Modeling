@@ -34,29 +34,20 @@ fit_model <-
            p_family, 
            data, 
            components, 
-           hyperparameters = NULL,
+           priors = NULL,
            result_type = 0, 
            iterations = 10000, 
            burning_iterations = 1000, 
            chains = 2, 
            seed = 123) {
-
-  # Define default hyperparameter values
-  defaults <- list(
-    mu    = list(mean  = c(0, 0), sd = c(5, 5)),
-    beta  = list(mean  = c(0, 0), sd = c(5, 5)),
-    sigma = list(scale = c(2.5, 2.5)),
-    theta = list(alpha = 1, beta  = 1),
-    phi   = list(rate  = c(1, 1))
-  )
   
-  # Set default hyperparameter values if not passed in
-  if (is.null(hyperparameters)) { # if nothing passed in, use all defaults
-    hyperparameters <- defaults
-  } else if (!is.list(hyperparameters)) { # very simple validation of prior format
-    stop("Invalid argument: 'priors' must be a named list of lists.")
-  } else { # use hyperparameters passed in, with default values for missing ones
-    hyperparameters <- utils::modifyList(defaults, hyperparameters)
+  # Set default priors if not passed in
+  if (is.null(priors)) { # if nothing passed in, use all defaults
+    priors <- fill_defaults(list(), p_family)
+  } else if (!is.list(priors)) { # very simple validation of prior format
+    stop("Invalid argument: 'priors' must be a named list.")
+  } else { # use priors passed in, with default values for missing ones
+    priors <- fill_defaults(priors, p_family)
   }
   
   # Parse seed and generate random if "random" passed in
@@ -96,89 +87,24 @@ fit_model <-
   }
 
   # Generate stan file
-  stan_file <- generate_stan(components, formula, data)
+  stan_file <- generate_stan(components, formula, data, priors)
 
   # Prepare the data~
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")
   }
   
-  #Handle the formula & prepare the data
+  # Handle the formula
   model_frame <- model.frame(formula, data)
   y <- model.response(model_frame)
   X <- model.matrix(formula, model_frame)[, -1]
 
-  # Prepare hyperparameter data
-  # -- mu
-  if (length(hyperparameters$mu$mean) == 2) {
-    mu1_loc <- hyperparameters$mu$mean[1]
-    mu2_loc <- hyperparameters$mu$mean[2]
-  } else {
-    mu1_loc <- mu2_loc <- hyperparameters$mu$mean
-  }
-  if (length(hyperparameters$mu$sd) == 2) {
-    mu1_scale <- hyperparameters$mu$sd[1]
-    mu2_scale <- hyperparameters$mu$sd[2]
-  } else {
-    mu1_scale <- mu2_scale <- hyperparameters$mu$sd
-  }
-  # -- beta
-  if (length(hyperparameters$beta$mean) == 2) {
-    beta1_loc   <- hyperparameters$beta$mean[1]
-    beta2_loc   <- hyperparameters$beta$mean[2]
-  } else {
-    beta1_loc   <- beta2_loc <- hyperparameters$beta$mean
-  }
-  if (length(hyperparameters$beta$sd) == 2) {
-    beta1_scale <- hyperparameters$beta$sd[1]
-    beta2_scale <- hyperparameters$beta$sd[2]
-  } else {
-    beta1_scale <- beta2_scale <- hyperparameters$beta$sd
-  }
-  # -- sigma (scale-only)
-  if (length(hyperparameters$sigma$scale) == 2) {
-    sigma1_scale <- hyperparameters$sigma$scale[1]
-    sigma2_scale <- hyperparameters$sigma$scale[2]
-  } else {
-    sigma1_scale <- sigma2_scale <- hyperparameters$sigma$scale
-  }
-  
-  # -- theta
-  theta_alpha <- hyperparameters$theta$alpha
-  theta_beta  <- hyperparameters$theta$beta
-  
-  # -- phi (Gamma rate parameters)
-  if (is.list(hyperparameters$phi$rate)) {
-    phi1_rate <- hyperparameters$phi$rate[1]
-    phi2_rate <- hyperparameters$phi$rate[2]
-  } else {
-    phi1_rate <- phi2_rate <- hyperparameters$phi$rate
-  }
-  
+  # prepare data
   stan_data <- list(
     N = nrow(data),
     K = ncol(data) - 1,
     X = X,
-    y = y,
-    
-    mu1_loc = mu1_loc,
-    mu2_loc = mu2_loc,
-    mu1_scale = mu1_scale,
-    mu2_scale = mu2_scale,
-    
-    beta1_loc    = beta1_loc,
-    beta2_loc    = beta2_loc,
-    beta1_scale  = beta1_scale,
-    beta2_scale  = beta2_scale,
-    
-    sigma1_scale = sigma1_scale,
-    sigma2_scale = sigma2_scale,
-    
-    theta_alpha  = theta_alpha,
-    theta_beta   = theta_beta,
-    
-    phi1_rate    = phi1_rate,
-    phi2_rate    = phi2_rate
+    y = y
   )
 
   # Load the Stan model

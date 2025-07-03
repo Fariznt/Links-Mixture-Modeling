@@ -42,6 +42,11 @@ model {
   scale2 ~ gamma(scale2_alpha, scale2_beta);
   theta ~ beta(theta_alpha, theta_beta);
   
+  // TEMP; remove vvvv
+  //vector[3] alpha = [0,1,2];
+  //vector[3] beta = [0,1,2];
+  //theta ~ beta(alpha, beta);
+  
   for (n in 1 : N) {
     real log_p1 = log(theta);
     real log_p2 = log(1 - theta);

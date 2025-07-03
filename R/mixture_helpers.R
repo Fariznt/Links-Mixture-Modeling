@@ -12,6 +12,49 @@ NULL
   options(mc.cores = parallel::detectCores())
 }
 
+#' Fill in sensible default priors for a given p_family,
+#' then override with any user-supplied priors.
+#'
+#' @param priors A named list of user-specified priors, e.g.
+#'   list(beta1 = "normal(0,5)", theta = "beta(2,2)")
+#' @param p_family One of "linear", "poisson", "logistic", or "gamma"
+#' @return A named list of priors in the same format as `priors`,
+#'   containing one entry for every required parameter.
+fill_defaults <- function(priors = list(), p_family) {
+  defaults <- switch(
+    p_family,
+    "linear" = list(
+      mu1 = "normal(0,5)",
+      beta1 = "normal(0,5)",
+      sigma1 = "cauchy(0,2.5)",
+      mu2 = "normal(0,5)",
+      beta2  = "normal(0,5)",
+      sigma2 = "cauchy(0,2.5)",
+      theta = "beta(1,1)"
+    ),
+    "poisson" = list(
+      beta1 = "normal(0,5)",
+      beta2 = "normal(0,5)",
+      theta = "beta(1,1)"
+    ),
+    "logistic" = list(
+      beta1 = "normal(0,5)", #0,2.5
+      beta2 = "normal(0,5)",
+      theta = "beta(1,1)"
+    ),
+    "gamma" = list(
+      beta1 = "normal(0,5)",
+      beta2 = "normal(0,5)",
+      shape = "gamma(2,0.1)",
+      theta = "beta(1,1)"
+    ),
+    stop("`p_family` must be one of 'linear','poisson','logistic','gamma'")
+  )
+  # merge user overrides into the defaults
+  utils::modifyList(defaults, priors)
+}
+
+
 
 #' Creates synthetic data for testing mixture models.
 #'
@@ -19,7 +62,7 @@ NULL
 #' @param seed Random seed
 #' @return A data frame with synthetic data
 #' @keywords internal
-generate_synthetic_mixture_data <- function(family, seed) {
+generate_synthetic_mixture_data <- function(family, seed, priors) {
   set.seed(seed)
   
   N <- 200
@@ -107,7 +150,7 @@ generate_synthetic_mixture_data <- function(family, seed) {
 #' @param data Input data
 #' @return Path to generated Stan file
 #' @keywords internal
-generate_stan <- function(components, formula, data) {
+generate_stan <- function(components, formula, data, priors) {
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
@@ -124,19 +167,6 @@ generate_stan <- function(components, formula, data) {
       "  int<lower=1> K;             // Number of predictors",
       "  matrix[N, K] X;             // Predictor matrix",
       "  vector[N] y;                // Response vector",
-      "  // prior hyperparameters",
-      "  real mu1_loc;",
-      "  real mu2_loc;",
-      "  real<lower=0> mu1_scale;",
-      "  real<lower=0> mu2_scale;",
-      "  real beta1_loc;",
-      "  real beta2_loc;",
-      "  real<lower=0> beta1_scale;",
-      "  real<lower=0> beta2_scale;",
-      "  real<lower=0> sigma1_scale;",
-      "  real<lower=0> sigma2_scale;",
-      "  real<lower=0> theta_alpha;",
-      "  real<lower=0> theta_beta;",
       "}",
       "parameters {",
       "  real<lower=0, upper=1> theta; // Mixture weight for the first component",
@@ -149,13 +179,13 @@ generate_stan <- function(components, formula, data) {
       "}",
       "model {",
       "  // Priors",
-      "  mu1 ~ normal(mu1_loc, mu1_scale);",
-      "  mu2 ~ normal(mu2_loc, mu2_scale);",
-      "  sigma1 ~ cauchy(0, sigma1_scale);",
-      "  sigma2 ~ cauchy(0, sigma2_scale);",
-      "  beta1 ~ normal(beta1_loc, beta1_scale);",
-      "  beta2 ~ normal(beta2_loc, beta2_scale);",
-      "  theta ~ beta(theta_alpha, theta_beta);",
+      "  mu1 ~ ", priors$mu1, ";",
+      "  mu2 ~ ", priors$mu2, ";",
+      "  sigma1 ~ ", priors$sigma1, ";",
+      "  sigma2 ~ ", priors$sigma2, ";",
+      "  beta1 ~ ", priors$beta1, ";",
+      "  beta2 ~ ", priors$beta2, ";",
+      "  theta ~ ", priors$theta, ";",
       "",
       "  // Mixture model likelihood",
       "  for (n in 1:N) {",
@@ -201,13 +231,6 @@ generate_stan <- function(components, formula, data) {
       "  int<lower=0> y[N];          // Poisson response variable (counts)",
       "  int<lower=1> K;             // Number of predictors",
       "  matrix[N, K] X;             // Predictor matrix",
-      "  // prior hyperparameters",
-      "  real beta1_loc;",
-      "  real beta2_loc;",
-      "  real<lower=0> beta1_scale;",
-      "  real<lower=0> beta2_scale;",
-      "  real<lower=0> theta_alpha;",
-      "  real<lower=0> theta_beta;",
       "}",
       "",
       "parameters {",
@@ -232,9 +255,9 @@ generate_stan <- function(components, formula, data) {
       "  }",
       "",
       "  // Priors for regression coefficients",
-      "  beta1 ~ normal(beta1_loc, beta1_scale);",
-      "  beta2 ~ normal(beta2_loc, beta2_scale);",
-      "  theta ~ beta(theta_alpha, theta_beta);",
+      "  beta1 ~ ", priors$beta1, ";",
+      "  beta2 ~ ", priors$beta2, ";",
+      "  theta ~ ", priors$theta, ";",
       "}",
       "",
       "generated quantities {",
@@ -264,15 +287,6 @@ generate_stan <- function(components, formula, data) {
       "  int<lower=1> K;               // Number of predictors",
       "  vector<lower=0>[N] y;         // Response variable (positive values)",
       "  matrix[N, K] X;               // Predictor matrix",
-      "  // prior hyperparameters",
-      "  real beta1_loc;",
-      "  real beta2_loc;",
-      "  real<lower=0> beta1_scale;",
-      "  real<lower=0> beta2_scale;",
-      "  real<lower=0> theta_alpha;",
-      "  real<lower=0> theta_beta;",
-      "  real<lower=0> phi1_rate;",
-      "  real<lower=0> phi2_rate;",
       "}",
       "",
       "parameters {",
@@ -297,12 +311,12 @@ generate_stan <- function(components, formula, data) {
       "  }",
       "",
       "  // Priors for regression coefficients and mix proportion",
-      "  beta1 ~ normal(beta1_loc, beta1_scale);",
-      "  beta2 ~ normal(beta2_loc, beta2_scale);",
-      "  theta ~ beta(theta_alpha, theta_beta);",
+      "  beta1 ~ ", priors$beta1, ";",
+      "  beta2 ~ ", priors$beta2, ";",
+      "  theta ~ ", priors$theta, ";",
       "  // Priors for shape parameters",
-      "  phi1 ~ exponential(phi1_rate);",
-      "  phi2 ~ exponential(phi2_rate);",
+      "  phi1 ~ ", priors$phi1, ";",
+      "  phi2 ~ ", priors$phi2, ";",
       "}",
       "",
       "generated quantities {",
@@ -341,13 +355,6 @@ generate_stan <- function(components, formula, data) {
       "  int<lower=1> K;           // Number of predictors",
       "  matrix[N, K] X;           // Predictor matrix",
       "  int<lower=0, upper=1> y[N]; // Binary outcome",
-      "  // prior hyperparameters",
-      "  real beta1_loc;",
-      "  real beta2_loc;",
-      "  real<lower=0> beta1_scale;",
-      "  real<lower=0> beta2_scale;",
-      "  real<lower=0> theta_alpha;",
-      "  real<lower=0> theta_beta;",
       "}",
       "",
       "parameters {",
@@ -362,11 +369,11 @@ generate_stan <- function(components, formula, data) {
       "",
       "  // Priors",
       "  // Uniform prior on mixing proportion:",
-      "  theta ~ beta(theta_alpha, theta_beta);",
+      "  theta ~ ", priors$theta, ";",
       "  // Prior for regression coefficients (component 1):",
-      "  beta1 ~ normal(beta1_loc, beta1_scale);",
+      "  beta1 ~ ", priors$beta1, ";",
       "  // Prior for regression coefficients (component 2):",
-      "  beta2 ~ normal(beta2_loc, beta2_scale);",
+      "  beta2 ~ ", priors$beta2, ";",
       "",
       "  // Mixture model likelihood",
       "  for (n in 1:N) {",
