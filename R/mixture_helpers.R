@@ -142,6 +142,21 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
   return(data.frame(X, y))
 }
 
+# TO BE ANNOTATED -- generate stan helper
+process_variable <- function(value, key) {
+  if (is.character(value)) {
+    return("") # dont include strings i.e. priors themselves ex. normal(x,y)
+  } else if (is.numeric(value)) { 
+    if (length(value) == 1L) { # not a vector
+      print("reached")
+      return(paste0("real ", key, " = ", value, ";"))
+    } else { # is a vector
+      # TBD
+    }
+  } else {
+    stop("Element of invalid type found in list 'priors'")
+  }
+}
 
 #' Generate stan code for mixture models
 #'
@@ -152,6 +167,21 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
 #' @keywords internal
 generate_stan <- function(components, formula, data, priors) {
   
+  print(priors) # TODO remove: FOR DEBUGGING
+  print("======")
+  
+  # generate from list of priors the necessary variable definition Stan strings 
+  # to concatenate before the prior definition
+  # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
+  variable_definitions <- "" 
+  for (item_key in names(priors)) {
+    # concatenate stan code for variable definition
+    # generated from processing key-value pairs in priors list
+    variable_definitions <- paste0(
+      variable_definitions, process_variable(priors[[item_key]], item_key))
+  }
+  print(variable_definitions)  # TODO remove: FOR DEBUGGING
+  
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
     model_frame <- stats::model.frame(formula, data)
@@ -159,7 +189,8 @@ generate_stan <- function(components, formula, data, priors) {
     X <- stats::model.matrix(formula, model_frame)[, -1, drop = FALSE]
     K <- ncol(X)
     N <- nrow(X)
-    
+  
+  
     # Fixed Stan code for linear-linear mixture
     stan_code <- paste(
       "data {",
@@ -168,6 +199,11 @@ generate_stan <- function(components, formula, data, priors) {
       "  matrix[N, K] X;             // Predictor matrix",
       "  vector[N] y;                // Response vector",
       "}",
+      "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  real<lower=0, upper=1> theta; // Mixture weight for the first component",
       "  real mu1;                     // Mean of the first component",
@@ -233,12 +269,15 @@ generate_stan <- function(components, formula, data, priors) {
       "  matrix[N, K] X;             // Predictor matrix",
       "}",
       "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  real<lower=0, upper=1> theta;           // Mixing proportions (constrained to sum to 1)",
       "  vector[K] beta1;            // Regression coefficients for component 1",
       "  vector[K] beta2;            // Regression coefficients for component 2",
       "}",
-      "",
       "model {",
       "  vector[N] log_lik1;         // Log-likelihood for component 1",
       "  vector[N] log_lik2;         // Log-likelihood for component 2",
@@ -289,6 +328,10 @@ generate_stan <- function(components, formula, data, priors) {
       "  matrix[N, K] X;               // Predictor matrix",
       "}",
       "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  real<lower=0, upper=1> theta; // Mixing proportions (must sum to 1)",
       "  vector[K] beta1;              // Regression coefficients for component 1",
@@ -296,7 +339,6 @@ generate_stan <- function(components, formula, data, priors) {
       "  real<lower=0> phi1;           // Shape parameter for component 1",
       "  real<lower=0> phi2;           // Shape parameter for component 2",
       "}",
-      "",
       "model {",
       "  vector[N] mu1 = exp(X * beta1);  // Mean of Gamma for component 1",
       "  vector[N] mu2 = exp(X * beta2);  // Mean of Gamma for component 2",
@@ -357,12 +399,15 @@ generate_stan <- function(components, formula, data, priors) {
       "  int<lower=0, upper=1> y[N]; // Binary outcome",
       "}",
       "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  real<lower=0, upper=1> theta;     // Mixing proportion (for component 1)",
       "  vector[K] beta1;                 // Regression coefficients for component 1",
       "  vector[K] beta2;                 // Regression coefficients for component 2",
       "}",
-      "",
       "model {",
       "  vector[N] log_lik1;  // Log-likelihood contributions from component 1",
       "  vector[N] log_lik2;  // Log-likelihood contributions from component 2",
@@ -403,7 +448,6 @@ generate_stan <- function(components, formula, data, priors) {
     stop("Invalid mixture inputs. Must be: linear, poisson, gamma, or logistic")
   }
 }
-
 
 #' Process model results
 #'

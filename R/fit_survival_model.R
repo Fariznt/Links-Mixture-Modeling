@@ -70,6 +70,8 @@ fit_survival_model <-
       hyperparameters <- utils::modifyList(defaults, hyperparameters)
     }
     
+    
+    
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)

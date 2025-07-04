@@ -4,6 +4,11 @@ data {
   matrix[N, K] X;             // Predictor matrix
   vector[N] y;                // Response vector
 }
+
+transformed data {
+real x = 0;real m = 5;
+}
+
 parameters {
   real<lower=0, upper=1> theta; // Mixture weight for the first component
   real mu1;                     // Mean of the first component
@@ -28,7 +33,7 @@ cauchy(0,2.5)
 cauchy(0,2.5)
 ;
   beta1 ~ 
-normal(0,5)
+normal(x,m)
 ;
   beta2 ~ 
 normal(0,5)
