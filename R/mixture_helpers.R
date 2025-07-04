@@ -170,9 +170,6 @@ process_variable <- function(value, key) {
 #' @keywords internal
 generate_stan <- function(components, formula, data, priors) {
   
-  print(priors) # TODO remove: FOR DEBUGGING
-  print("======")
-  
   # generate from list of priors the necessary variable definition Stan strings 
   # to concatenate before the prior definition
   # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
@@ -183,7 +180,6 @@ generate_stan <- function(components, formula, data, priors) {
     variable_definitions <- paste0(
       variable_definitions, process_variable(priors[[item_key]], item_key))
   }
-  print(variable_definitions)  # TODO remove: FOR DEBUGGING
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
