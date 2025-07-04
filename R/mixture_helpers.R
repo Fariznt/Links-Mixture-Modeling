@@ -55,7 +55,6 @@ fill_defaults <- function(priors = list(), p_family) {
 }
 
 
-
 #' Creates synthetic data for testing mixture models.
 #'
 #' @param family Distribution family ("linear", "logistic", "poisson", "gamma")
@@ -148,10 +147,14 @@ process_variable <- function(value, key) {
     return("") # dont include strings i.e. priors themselves ex. normal(x,y)
   } else if (is.numeric(value)) { 
     if (length(value) == 1L) { # not a vector
-      print("reached")
       return(paste0("real ", key, " = ", value, ";"))
-    } else { # is a vector
-      # TBD
+    } else { 
+      # value is a vector; useful to define hyperparamaeters f
+      # or components of beta1/beta2
+      len = length(value)
+      # convert vector to stan list as a string:
+      stan_vector = paste0("[", paste(value, collapse=", "), "]'")
+      return(paste0("vector[", len, "] ", key, " = ", stan_vector, ";"))
     }
   } else {
     stop("Element of invalid type found in list 'priors'")

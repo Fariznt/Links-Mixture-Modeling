@@ -6,7 +6,7 @@ data {
 }
 
 transformed data {
-real x = 0;real m = 5;
+vector[3] x = [1, 2, 3]';vector[3] m = [1, 2, 3]';
 }
 
 parameters {
