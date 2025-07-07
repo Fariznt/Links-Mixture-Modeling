@@ -144,20 +144,37 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
 # TO BE ANNOTATED -- generate stan helper
 process_variable <- function(value, key) {
   if (is.character(value)) {
-    return("") # dont include strings i.e. priors themselves ex. normal(x,y)
-  } else if (is.numeric(value)) { 
-    if (length(value) == 1L) { # not a vector
-      return(paste0("real ", key, " = ", value, ";"))
-    } else { 
-      # value is a vector; useful to define hyperparamaeters f
-      # or components of beta1/beta2
+    # dont include strings i.e. priors themselves ex. normal(x,y) 
+    # in final definitions block
+    return(list(declaration="", definition="")) 
+  } else if (is.matrix(value)) { 
+    if (nrow(value) == ncol(value) && isSymmetric(value)) {
+      dim = nrow(value)
+    } else {
+      stop("Non-square or unsymmetric matrix found in list 'priors'")
+    }
+    dec = paste0("cov_matrix[", dim, "] ", key, ";") # declaration
+    component_defs = ""
+    for (i in 1:dim) {
+      for (j in 1:dim) {
+        component <- paste0(key, "[", i, ", ", j, "] = ", value[i, j], ";" )
+        component_defs <- paste0(component_defs, component)
+      }
+    }
+    return(list(declaration=dec, definition=component_defs))
+  } else if (is.numeric(value)) { # non-matrix numeric
+    if (length(value) == 1L) { # not a vector; scalar
+      def = paste0("real ", key, " = ", value, ";")
+      return(declaration="", definition=def)
+    } else { # value is a vector
       len = length(value)
       # convert vector to stan list as a string:
       stan_vector = paste0("[", paste(value, collapse=", "), "]'")
-      return(paste0("vector[", len, "] ", key, " = ", stan_vector, ";"))
+      def = paste0("vector[", len, "] ", key, " = ", stan_vector, ";")
+      return(list(declaration="", definition=def))
     }
   } else {
-    stop("Element of invalid type found in list 'priors'")
+    stop("Element of invalid type or form found in list 'priors'")
   }
 }
 
@@ -173,13 +190,23 @@ generate_stan <- function(components, formula, data, priors) {
   # generate from list of priors the necessary variable definition Stan strings 
   # to concatenate before the prior definition
   # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
-  variable_definitions <- "" 
+  variable_declarations <- "" # ex. cov_matrix[3] beta1_sigma;
+  variable_definitions <- "" # ex. beta1_sigma = ...; or vector[3] vec = [1,2,3]'
   for (item_key in names(priors)) {
     # concatenate stan code for variable definition
     # generated from processing key-value pairs in priors list
+    
+    # includes length 2 list with declaration (if separate from definition) 
+    # and definition if one is needed for this variable
+    processed_tuple <- process_variable(priors[[item_key]], item_key)
+    variable_declarations <- paste0(
+      variable_declarations, processed_tuple[["declaration"]])
     variable_definitions <- paste0(
-      variable_definitions, process_variable(priors[[item_key]], item_key))
+      variable_definitions, processed_tuple[["definition"]])
   }
+  # combine separate declarations with definitions to create a single variable
+  # holding a string of complete definitions of prior hyperparameters
+  variable_definitions <- paste0(variable_declarations, variable_definitions)
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
@@ -246,6 +273,9 @@ generate_stan <- function(components, formula, data, priors) {
       "}",
       sep = "\n"
     )
+    
+    # temp
+    print(stan_code)
     
     # Create filename
     stan_file <- "gtmix_linear.stan"

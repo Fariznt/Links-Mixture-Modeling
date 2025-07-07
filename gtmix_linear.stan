@@ -6,7 +6,7 @@ data {
 }
 
 transformed data {
-vector[3] x = [1, 2, 3]';vector[3] m = [1, 2, 3]';
+cov_matrix[2] beta1_sigma;beta1_sigma[1, 1] = 2;beta1_sigma[1, 2] = 1;beta1_sigma[2, 1] = 1;beta1_sigma[2, 2] = 2;vector[2] beta1_loc = [7, 8]';
 }
 
 parameters {
@@ -33,7 +33,7 @@ cauchy(0,2.5)
 cauchy(0,2.5)
 ;
   beta1 ~ 
-normal(x,m)
+multi_normal(beta1_loc, beta1_sigma)
 ;
   beta2 ~ 
 normal(0,5)
