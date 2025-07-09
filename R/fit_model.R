@@ -49,6 +49,10 @@ fit_model <-
   } else { # use priors passed in, with default values for missing ones
     priors <- fill_defaults(priors, p_family)
   }
+    
+  if (!are_valid_args(priors, p_family)) {
+    stop("Error occurred during input validation");
+  }
   
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
