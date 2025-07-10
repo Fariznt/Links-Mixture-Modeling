@@ -9,7 +9,7 @@ data {
 }
 
 transformed data {
-cov_matrix[2] beta1_sigma;beta1_sigma[1, 1] = 2;beta1_sigma[1, 2] = 1;beta1_sigma[2, 1] = 1;beta1_sigma[2, 2] = 2;vector[2] beta1_loc = [7, 8]';
+cov_matrix[2] beta1_sigma;beta1_sigma[1, 1] = 2;beta1_sigma[1, 2] = 1;beta1_sigma[2, 1] = 1;beta1_sigma[2, 2] = 2;vector[2] beta1_loc = [7, 8]';real mu2_loc = 0;real mu2_scale = 6;
 }
 
 parameters {
@@ -24,10 +24,10 @@ parameters {
 model {
   // Priors
   mu1 ~ 
-normal(0,5)
+normal(0,4)
 ;
   mu2 ~ 
-normal(0,5)
+normal(mu2_loc, mu2_scale)
 ;
   sigma1 ~ 
 cauchy(0,2.5)

@@ -4,14 +4,9 @@
 #' @param p_family Distribution family ("linear", "logistic", "poisson", "gamma")
 #' @param data Input data frame or "random" for synthetic data
 #' @param components Vector specifying mixture components (e.g., c("linear", "linear"))
-#' @param hyperparameters Named list (or NULL).  Expected keys:
-#'   `mu = list(mean, sd)`, `beta = list(mean, sd)`,
-#'   `sigma = list(scale)`, `theta = list(alpha, beta)`,
-#'   `phi = list(rate)` (gamma only).
-#'   mean, sd, scale, rate are length-2 vectors, where each value corresponds to
-#'   one of the two components in the mixture. If a scalar is passed, it
-#'   is used for both components. NULL or missing
-#'   values triggers weakly-informative default priors.
+#' @param priors Named list (or NULL) of strings defining priors and optionally
+#' hyperparameter definitions used in the prior definition. NULL priors or missing
+#' list elements defining needed priors triggers weakly-informative defaults.
 #' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param burning_iterations Number of burn-in iterations
@@ -24,11 +19,26 @@
 #' @importFrom utils read.csv
 #' @examples
 #' \dontrun{
-#' # Linear mixture example
-#' fit <- fit_model(y ~ x1 + x2, "linear", data = df, 
-#'                 components = c("linear", "linear"))
+#' # Linear mixture example, assuming cov_matrix is a defined R matrix
+#' lin_fit <- LinksMixtureModeling::fit_model(
+#'  formula             = y ~ X1 + X2,        # y, X1, X2 auto-generated
+#'  p_family            = "linear",
+#'  data                = "random",           # triggers built-in generator
+#'  components          = c("linear", "linear"),
+#'  priors              = list(beta1_sigma = cov_matrix, 
+#'                             beta1_loc = c(7,8), 
+#'                             beta1 = "multi_normal(beta1_loc, beta1_sigma)",
+#'                             mu1 = "normal(0,4)",
+#'                             mu2_loc = 0,
+#'                             mu2_scale = 6,
+#'                             mu2 = "normal(mu2_loc, mu2_scale)"),
+#'  result_type         = 1,                  # post-processed summary
+#'  iterations          = 2000,               # 1000 warm-up + 1000 sampling
+#'  burning_iterations  = 1000,
+#'  chains              = 2,
+#'  seed                = 123
+#')
 #' }
-
 fit_model <- 
   function(formula, 
            p_family, 

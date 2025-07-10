@@ -194,7 +194,7 @@ process_variable <- function(value, key) {
   } else if (is.numeric(value)) { # non-matrix numeric
     if (length(value) == 1L) { # not a vector; scalar
       def = paste0("real ", key, " = ", value, ";")
-      return(declaration="", definition=def)
+      return(list(declaration="", definition=def, stan_func=""))
     } else { # value is a vector
       len = length(value)
       # convert vector to stan list as a string:
