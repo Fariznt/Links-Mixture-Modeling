@@ -92,8 +92,10 @@ is_func <- function(stan_function) {
   inherits(stan_function, "stan_function_string")
 }
 
-#' Lightly validate user-supplied arguments; further validation occurs during
-#' iteration over list elements in process_Variables
+#' Initially validate user-supplied arguments; further validation occurs during
+#' iteration over list elements in process_Variables. Primarily verifies
+#' format for prior string follows <dist>(<comma separated args>) where
+#' each arg is either a number or defined in the priors list.
 #' 
 #' @param priors A named list of Stan‐style prior strings, e.g.
 #' list(mu1 = "normal(0,5))", sigma1 = "cauchy(0,2.5))
@@ -112,21 +114,50 @@ are_valid_args <- function(priors, p_family) {
     stop("`priors` must be a named list of prior strings")
   }
   
-  #some blocks were removed because they dont make sense for the implementation
-  
-  
-  # this block is temporary disabled---needs major changes
-  # 5) string must look like dist(…)
-  #    allowing both univariate and multivariate families
-  #tested_dists <- c("normal", "cauchy", "beta", "gamma", "multi_normal")
-  #pattern <- sprintf("^(%s)\\s*\\((.+)\\)$", paste(tested_dists, collapse = "|"))
-  #bad_syntax <- names(priors)[!grepl(pattern, priors)]
-  #if (length(bad_syntax) > 0) {
-  #  stop("Invalid prior syntax for: ", paste(bad_syntax, collapse = ", "),
-  #       ". Each must look like dist(args), where dist ∈ {",
-  #       paste(tested_dists, collapse = ", "), "}.")
-  #}
-  
+  for (elt in priors) {
+    if (is.character(elt) && !is_func(elt)) { # only looking at prior strings
+      trimmed_elt <- trimws(elt) # remove whitespace
+      
+      # verify basic structure <dist>(<args>)
+      pattern <- "^([^(\\s]+)\\s*\\(([^)]*)\\)\\s*$"
+      match <- regexec(pattern, trimmed_elt, perl = TRUE)
+      parts <- regmatches(trimmed_elt, match)[[1]]
+      dist = parts[2]
+      hyperparam = parts[3]
+      
+      if (length(parts) == 0 || hyperparam == "" || dist == "") {
+        stop("Prior defining string must be of form '<dist>(<comma-separated args>)'")
+      }
+      
+      # send warning about untested distributions
+      if (!(dist %in% c("normal", "cauchy", "beta", "gamma", "multi_normal"))) {
+        warning("An untested distribution was defined as prior. Tested ones", 
+                " include but are not limited to normal, cauchy, beta, gamma, and",
+                " multi_normal.")
+      }
+      
+      # validate args
+      if (nzchar(trimws(hyperparam))) { # if args has non-whitespace
+        # get individual args
+        raw_hyperparam_list <- strsplit(hyperparam, ",", fixed = TRUE)[[1]] 
+        hyperparam_list <- trimws(raw_hyperparam_list) # trim white space
+        
+        if (any(hyperparam_list == "") || grepl(",\\s*$", hyperparam)) {
+          stop("Missing values in list of hyperparameters of prior string")
+        } 
+        
+        for (hyperparam in hyperparam_list) {
+          # if hyperparameter is not a number and not a key defined in the priors
+          if (is.na(suppressWarnings(as.numeric(hyperparam))) 
+              && !(hyperparam %in% names(priors))) {
+            stop("A variable used in a prior string is not defined.",
+                 " If a string defining a prior in priors list is normal(x,y),",
+                 " x and y must be their own keys in list 'priors' to be used.")
+          }
+        }
+      }
+    }
+  }
   invisible(TRUE)
 }
 
@@ -138,8 +169,7 @@ are_valid_args <- function(priors, p_family) {
 #' stan function so it is apparent where the stan code should be inserted
 process_variable <- function(value, key) {
   if (is.character(value)) { # is string
-    if (is_func(value)) { # the string is a function i.e. stan_func("string")
-      print("reached") # TODO remove
+    if (is_func(value)) { # the string is a function i.e. stan_func("...stan function...")
       warning("Detected stan function definition. Note that stan function 
                 injection does not fully validate stan syntax.")
       return(list(declaration="", definition="", stan_func=as.character(value)))
