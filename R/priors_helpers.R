@@ -49,8 +49,8 @@ fill_defaults <- function(priors = list(), p_family) {
 #' string does not contain R function assignment syntax '<-'
 is_valid_stan_func <- function(str) {
   txt <- gsub("[\r\n]+", " ", str)
-  grepl("\\([^)]*\\).*\\{.*return.*\\}", str, perl = TRUE) &&
-    !grepl("<-", str, fixed = TRUE)
+  grepl("\\([^)]*\\).*\\{.*return.*\\}", txt, perl = TRUE) &&
+    !grepl("<-", txt, fixed = TRUE)
 }
 
 #' Wraps a string element in priors list to indicate that the string is intended 
@@ -79,7 +79,7 @@ stan_func <- function(stan_function_str) {
   if (!is.character(stan_function_str)) {
     stop("`stan_function_str` passed to stan_func() must be a single string.", call. = FALSE)
   } else if (!is_valid_stan_func(stan_function_str)) {
-    stop("`stan_function_str` is not a valid stan function")
+    stop("stan_func() called on invalid stan function")
   }
   structure(stan_function_str, class = c("stan_function_string", "character"))
 }
@@ -88,7 +88,7 @@ stan_func <- function(stan_function_str) {
 #' validation and prior list processing
 #' @param stan_function 
 #' @return true if argument was constructed as stan_func("..."), false otherwise
-is_stan_func <- function(stan_function) {
+is_func <- function(stan_function) {
   inherits(stan_function, "stan_function_string")
 }
 
@@ -137,10 +137,15 @@ are_valid_args <- function(priors, p_family) {
 #' @return a list that organizes stan code by definition, declaration, and/or 
 #' stan function so it is apparent where the stan code should be inserted
 process_variable <- function(value, key) {
-  if (is.character(value)) {
-    # dont include strings i.e. priors themselves ex. normal(x,y) 
-    # in final definitions block
-    return(list(declaration="", definition="", stan_func="")) 
+  if (is.character(value)) { # is string
+    if (is_func(value)) { # the string is a function i.e. stan_func("string")
+      print("reached") # TODO remove
+      warning("Detected stan function definition. Note that stan function 
+                injection does not fully validate stan syntax.")
+      return(list(declaration="", definition="", stan_func=as.character(value)))
+    } else { # the string is the prior definition itself ex. normal(x,y) 
+      return(list(declaration="", definition="", stan_func=""))  
+    }
   } else if (is.matrix(value)) { 
     if (nrow(value) == ncol(value) && isSymmetric(value)) {
       dim = nrow(value)
@@ -167,11 +172,6 @@ process_variable <- function(value, key) {
       def = paste0("vector[", len, "] ", key, " = ", stan_vector, ";")
       return(list(declaration="", definition=def, stan_func=""))
     }
-  } else if (is_stan_func(value)) {
-    print("reached")
-      warning("Detected stan function definition. Note that stan function 
-              injection does not fully validate stan syntax.")
-      return(list(declaration="", definition="", stan_func=as.character(value)))
   } else {
     stop("Element of invalid type or form found in list 'priors'")
   }

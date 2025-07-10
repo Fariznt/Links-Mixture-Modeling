@@ -24,7 +24,7 @@ parameters {
 model {
   // Priors
   mu1 ~ 
-mu_prior()
+normal(0,5)
 ;
   mu2 ~ 
 normal(0,5)
