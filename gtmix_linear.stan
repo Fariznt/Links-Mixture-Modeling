@@ -1,3 +1,6 @@
+functions {
+
+}
 data {
   int<lower=1> N;             // Number of data points
   int<lower=1> K;             // Number of predictors
@@ -21,7 +24,7 @@ parameters {
 model {
   // Priors
   mu1 ~ 
-normal(0,5)
+mu_prior()
 ;
   mu2 ~ 
 normal(0,5)

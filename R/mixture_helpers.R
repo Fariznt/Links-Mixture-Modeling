@@ -113,17 +113,19 @@ generate_stan <- function(components, formula, data, priors) {
   # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
   variable_declarations <- "" # ex. cov_matrix[3] beta1_sigma;
   variable_definitions <- "" # ex. beta1_sigma = ...; or vector[3] vec = [1,2,3]'
+  function_definitions <- "" # for injecting stan into function blocks
   for (item_key in names(priors)) {
-    # concatenate stan code for variable definition
+    # concatenate stan code for variables in dynamic stan generation
     # generated from processing key-value pairs in priors list
     
-    # includes length 2 list with declaration (if separate from definition) 
-    # and definition if one is needed for this variable
-    processed_tuple <- process_variable(priors[[item_key]], item_key)
+    processed_vars <- process_variable(priors[[item_key]], item_key)
     variable_declarations <- paste0(
-      variable_declarations, processed_tuple[["declaration"]])
+      variable_declarations, processed_vars[["declaration"]])
     variable_definitions <- paste0(
-      variable_definitions, processed_tuple[["definition"]])
+      variable_definitions, processed_vars[["definition"]])
+    function_definitions <- paste0(
+      function_definitions, processed_vars[["stan_func"]]
+    )
   }
   # combine separate declarations with definitions to create a single variable
   # holding a string of complete definitions of prior hyperparameters
@@ -137,9 +139,11 @@ generate_stan <- function(components, formula, data, priors) {
     K <- ncol(X)
     N <- nrow(X)
   
-  
     # Fixed Stan code for linear-linear mixture
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
       "  int<lower=1> N;             // Number of data points",
       "  int<lower=1> K;             // Number of predictors",
