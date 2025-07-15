@@ -108,33 +108,11 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
 #' @keywords internal
 generate_stan <- function(components, formula, data, priors) {
   
-  # generate from list of priors the necessary variable definition Stan strings 
-  # to concatenate before the prior definition
-  # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
-  variable_declarations <- "" # ex. cov_matrix[3] beta1_sigma;
-  variable_definitions <- "" # ex. beta1_sigma = ...; or vector[3] vec = [1,2,3]'
-  function_definitions <- "" # for injecting stan into function blocks
-  for (item_key in names(priors)) {
-    # concatenate stan code for variables in dynamic stan generation
-    # generated from processing key-value pairs in priors list
-    
-    processed_vars <- process_variable(priors[[item_key]], item_key)
-    variable_declarations <- paste0(
-      variable_declarations, processed_vars[["declaration"]])
-    variable_definitions <- paste0(
-      variable_definitions, processed_vars[["definition"]])
-    function_definitions <- paste0(
-      function_definitions, processed_vars[["stan_func"]]
-    )
-  }
-  # combine separate declarations with definitions to create a single variable
-  # holding a string of complete definitions of prior hyperparameters
-  variable_definitions <- paste0(variable_declarations, variable_definitions)
-  
-# this will replace that^ stuff
-#  definitions = get_stan_definitions(priors)
-#  variable_definitions = definitions[["variable defs"]]
-#  function_definitions = definitions[["function defs"]]
+  # Process prior list to get variable and function definitions for concatenation
+  # during stan generation
+  definitions = get_stan_definitions(priors)
+  variable_definitions = definitions[["variable_defs"]]
+  function_definitions = definitions[["function_defs"]]
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {

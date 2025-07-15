@@ -81,16 +81,6 @@ fill_defaults <- function(priors = list(), p_family, model_type = 'glm') {
   utils::modifyList(defaults, priors)
 }
 
-#' Helper function that lightly validates a string as (intended to be) a stan
-#' function. Specifically, returns true if str is of the form 
-#' ...(...)...{...return...}... where '...' is any arbitrary string AND the
-#' string does not contain R function assignment syntax '<-'
-is_valid_stan_func <- function(str) {
-  txt <- gsub("[\r\n]+", " ", str)
-  grepl("\\([^)]*\\).*\\{.*return.*\\}", txt, perl = TRUE) &&
-    !grepl("<-", txt, fixed = TRUE)
-}
-
 #' Wraps a string element in priors list to indicate that the string is intended 
 #' as a stan function.This string will be directly injected into a stan function 
 #' block with little validation and is intended for niche or advanced use cases. 
@@ -122,12 +112,14 @@ stan_func <- function(stan_function_str) {
   structure(stan_function_str, class = c("stan_function_string", "character"))
 }
 
-#' Checks if a prior list element was passed in as a stan function; used for
-#' validation and prior list processing
-#' @param stan_function 
-#' @return true if argument was constructed as stan_func("..."), false otherwise
-is_func <- function(stan_function) {
-  inherits(stan_function, "stan_function_string")
+#' Helper function that lightly validates a string as (intended to be) a stan
+#' function. Specifically, returns true if str is of the form 
+#' ...(...)...{...return...}... where '...' is any arbitrary string AND the
+#' string does not contain R function assignment syntax '<-'
+is_valid_stan_func <- function(str) {
+  txt <- gsub("[\r\n]+", " ", str)
+  grepl("\\([^)]*\\).*\\{.*return.*\\}", txt, perl = TRUE) &&
+    !grepl("<-", txt, fixed = TRUE)
 }
 
 #' Initially validate user-supplied arguments; further validation occurs during
@@ -211,12 +203,59 @@ validate_args <- function(priors, p_family) {
   invisible(TRUE)
 }
 
+#' Checks if a prior list element was passed in as a stan function; used for
+#' validation and prior list processing
+#' @param stan_function 
+#' @return true if argument was constructed as stan_func("..."), false otherwise
+is_func <- function(stan_function) {
+  inherits(stan_function, "stan_function_string")
+}
+
+#' Takes a list of priors and uses process_variable() on them to generate strings
+#' for concatenation into the stan code to be generated.
+#' @param priors The named list of priors and variable definitions
+#' @return A list with keys varaible_defs and function_defs where the corresponding
+#' values are the strings to be directly inserted into the stan code
+#' 
+get_stan_definitions <- function(priors) {
+  # generate from list of priors the necessary variable definition Stan strings 
+  # to concatenate before the prior definition
+  # ex. 'vector[2] mu;' and 'mu = [1, 2];' from list item mu = c(1,2)
+  variable_declarations <- "" # ex. cov_matrix[3] beta1_sigma;
+  variable_definitions <- "" # ex. beta1_sigma = ...; or vector[3] vec = [1,2,3]'
+  function_definitions <- "" # for injecting stan into function blocks
+  for (item_key in names(priors)) {
+    # concatenate stan code for variables in dynamic stan generation
+    # generated from processing key-value pair in priors list
+    
+    processed_vars <- process_variable(priors[[item_key]], item_key)
+    variable_declarations <- paste0(
+      variable_declarations, processed_vars[["declaration"]])
+    variable_definitions <- paste0(
+      variable_definitions, processed_vars[["definition"]])
+    function_definitions <- paste0(
+      function_definitions, processed_vars[["stan_func"]]
+    )
+  }
+  # combine separate declarations with definitions to create a single variable
+  # holding a string of complete definitions of prior hyperparameters
+  # These were generated separately because declarations must come before definitions
+  variable_definitions <- paste0(variable_declarations, variable_definitions)
+  
+  list(
+    variable_defs = variable_definitions,
+    function_defs = function_definitions     
+  )
+}
+
 #' Processes a given key-value pair from the priors list into syntactically
-#' valid stan to be inserted during stan generation. 
+#' valid stan to be inserted during stan generation. Helper function to 
+#' get_stan_definitions
 #' @param value Value ex. "normal(0,5)"
 #' @param key key ex. beta1
 #' @return a list that organizes stan code by definition, declaration, and/or 
 #' stan function so it is apparent where the stan code should be inserted
+#' @keywords internal
 process_variable <- function(value, key) {
   if (is.character(value)) { # is string
     if (is_func(value)) { # the string is a function i.e. stan_func("...stan function...")
