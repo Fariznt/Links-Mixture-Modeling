@@ -6,6 +6,7 @@
 #' @param truncation   0 or 1: whether to apply truncation
 #' @param status_column Name of the column holding 0/1 censoring flags
 #' @return             A single string containing the full Stan program
+#' @keywords           internal
 generate_survival_stan <- function(p_family,
                                    formula,
                                    data,

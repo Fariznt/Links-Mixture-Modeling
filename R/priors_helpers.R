@@ -4,44 +4,82 @@
 #' @param priors A named list of user-specified priors, e.g.
 #'   list(beta1 = "normal(0,5)", theta = "beta(2,2)")
 #' @param p_family One of "linear", "poisson", "logistic", or "gamma"
+#' @param model_type One of 'glm' (generalized linear model) or 'survival' 
+#' (survival model). By default, 'glm'.
 #' @return A named list of priors in the same format as `priors`,
 #'   containing one entry for every required parameter.
 #' @keywords internal
+fill_defaults <- function(priors = list(), p_family, model_type = 'glm') {
+  # Null prior means all defaults need to be filled. Create empty list
+  if (is.null(priors)) { 
+    priors <- list()
+  } 
+  
+  # very simple validation of prior format
+  if (!is.list(priors)) { 
+    stop("Invalid argument: 'priors' must be a named list.")
+  }
+  
+  # Create list of defaults based on family and model
+  if (model_type == 'glm') { 
+    defaults <- switch(
+      p_family,
+      "linear" = list(
+        mu1 = "normal(0,5)",
+        beta1 = "normal(0,5)",
+        sigma1 = "cauchy(0,2.5)",
+        mu2 = "normal(0,5)",
+        beta2  = "normal(0,5)",
+        sigma2 = "cauchy(0,2.5)",
+        theta = "beta(1,1)"
+      ),
+      "poisson" = list(
+        beta1 = "normal(0,5)",
+        beta2 = "normal(0,5)",
+        theta = "beta(1,1)"
+      ),
+      "logistic" = list(
+        beta1 = "normal(0,2.5)",
+        beta2 = "normal(0,5)",
+        theta = "beta(1,1)"
+      ),
+      "gamma" = list(
+        beta1 = "normal(0,5)",
+        beta2 = "normal(0,5)",
+        shape = "gamma(2,0.1)",
+        theta = "beta(1,1)"
+      ),
+      stop("`p_family` must be one of 'linear','poisson','logistic','gamma'",
+           " for model_type == 'glm'")
+    )
+  } else if (model_type == 'survival') {
+    defaults <- switch(
+      p_family,
+      "gamma" = list(
+        # priors for regression coefficients and mix proportion
+        beta1 = "normal(0,5)",
+        beta2 = "normal(0,5)",
+        theta = "beta(1,1)",
+        # priors for shape parameters
+        phi1 = "exponential(1)",
+        phi2 = "exponential(1)"
+      ),
+      "weibull" = list(
+        beta1 = "normal(0,2)",
+        beta2 = "normal(0,2)",
+        shape1 = "gamma(2,1)",
+        shape2 = "gamma(2,1)",
+        scale1 = "gamma(2,1)",
+        scale2 = "gamma(2,1)",
+        theta = "beta(1,1)"
+      ),
+      stop("")
+    )
+  }
 
-fill_defaults <- function(priors = list(), p_family) {
-  defaults <- switch(
-    p_family,
-    "linear" = list(
-      mu1 = "normal(0,5)",
-      beta1 = "normal(0,5)",
-      sigma1 = "cauchy(0,2.5)",
-      mu2 = "normal(0,5)",
-      beta2  = "normal(0,5)",
-      sigma2 = "cauchy(0,2.5)",
-      theta = "beta(1,1)"
-    ),
-    "poisson" = list(
-      beta1 = "normal(0,5)",
-      beta2 = "normal(0,5)",
-      theta = "beta(1,1)"
-    ),
-    "logistic" = list(
-      beta1 = "normal(0, 2.5)",
-      beta2 = "normal(0,5)",
-      theta = "beta(1,1)"
-    ),
-    "gamma" = list(
-      beta1 = "normal(0,5)",
-      beta2 = "normal(0,5)",
-      shape = "gamma(2,0.1)",
-      theta = "beta(1,1)"
-    ),
-    stop("`p_family` must be one of 'linear','poisson','logistic','gamma'")
-  )
-  # merge user overrides into the defaults
+  # merge user priors and appropriate defaults
   utils::modifyList(defaults, priors)
 }
-
 
 #' Helper function that lightly validates a string as (intended to be) a stan
 #' function. Specifically, returns true if str is of the form 
@@ -102,14 +140,19 @@ is_func <- function(stan_function) {
 #' @param p_family One of "linear", "poisson", "logistic", or "gamma"
 #' @return Invisibly TRUE if all checks pass or only raise warning; errors otherwise.
 #' @keywords internal
-are_valid_args <- function(priors, p_family) {
+validate_args <- function(priors, p_family) {
   # p_family must be one of the supported families
-  supported_families <- c("linear","poisson","logistic","gamma")
+  supported_families <- c("linear","poisson","logistic","gamma", "weibull")
   if (!(p_family %in% supported_families)) {
     stop("`p_family` must be one of: ", paste(supported_families, collapse = ", "))
   }
   
-  # priors list must be a named list
+  # If priors == NULL, no need to check its validity beyond that
+  if (is.null(priors)) {
+    return(invisible(TRUE))
+  }
+  
+  # priors list must be a named list or null (in which case all defaults are used)
   if (!is.list(priors) || is.null(names(priors))) {
     stop("`priors` must be a named list of prior strings")
   }
@@ -125,15 +168,22 @@ are_valid_args <- function(priors, p_family) {
       dist = parts[2]
       hyperparam = parts[3]
       
-      if (length(parts) == 0 || hyperparam == "" || dist == "") {
-        stop("Prior defining string must be of form '<dist>(<comma-separated args>)'")
+      if (length(parts) == 0 
+          || (hyperparam == "" && all(!vapply(priors, is_func, logical(1)))) 
+          || dist == "") {
+        stop("Prior defining string '",
+             elt,
+             "' must be of form '<dist>(<comma-separated args>)'")
       }
       
       # send warning about untested distributions
-      if (!(dist %in% c("normal", "cauchy", "beta", "gamma", "multi_normal"))) {
+      if (!(dist %in% c("normal", "cauchy", "beta", "gamma", "exponential", "multi_normal"))) {
         warning("An untested distribution was defined as prior. Tested ones", 
-                " include but are not limited to normal, cauchy, beta, gamma, and",
-                " multi_normal.")
+                " include but are not limited to normal, cauchy, beta, gamma,",
+                " exponential, and multi_normal. Correct output can be expected",
+                " regardless if the distribution is a valid stan distribution,",
+                " or defined by a stan function injection with stan_func()---",
+                " see documentation for details.")
       }
       
       # validate args

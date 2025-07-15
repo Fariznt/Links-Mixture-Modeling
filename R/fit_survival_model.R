@@ -31,7 +31,23 @@
 #' truncation = 0,
 #' status_column = "status") }
 
-fit_survival_model <- function(formula, p_family, data, result_type, iterations, burning_iterations, chains, seed, truncation = 0, status_column = NULL) {
+fit_survival_model <- function(formula, 
+                               p_family, 
+                               data, 
+                               priors = NULL,
+                               result_type, 
+                               iterations, 
+                               burning_iterations, 
+                               chains, 
+                               seed, 
+                               truncation = 0, 
+                               status_column = NULL) {
+  
+  validate_args(priors, p_family)
+  
+  # Set default priors if some or all not passed in, or if priors == NULL
+  priors <- fill_defaults(priors, p_family, 'survival')
+  
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)

@@ -131,6 +131,11 @@ generate_stan <- function(components, formula, data, priors) {
   # holding a string of complete definitions of prior hyperparameters
   variable_definitions <- paste0(variable_declarations, variable_definitions)
   
+# this will replace that^ stuff
+#  definitions = get_stan_definitions(priors)
+#  variable_definitions = definitions[["variable defs"]]
+#  function_definitions = definitions[["function defs"]]
+  
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
     model_frame <- stats::model.frame(formula, data)

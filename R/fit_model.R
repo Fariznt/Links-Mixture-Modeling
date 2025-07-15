@@ -51,19 +51,11 @@ fit_model <-
            chains = 2, 
            seed = 123) {
   
-  # Set default priors if not passed in
-  if (is.null(priors)) { # if nothing passed in, use all defaults
-    priors <- fill_defaults(list(), p_family)
-  } else if (!is.list(priors)) { # very simple validation of prior format
-    stop("Invalid argument: 'priors' must be a named list.")
-  } else { # use priors passed in, with default values for missing ones
-    priors <- fill_defaults(priors, p_family)
-  }
+  validate_args(priors, p_family)
     
-  if (!are_valid_args(priors, p_family)) {
-    stop("Error occurred during input validation");
-  }
-  
+  # Set default priors if some or all not passed in
+  priors <- fill_defaults(priors, p_family, 'glm')
+
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
     seed <- sample.int(1e6, 1)
