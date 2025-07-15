@@ -3,16 +3,6 @@ data {
   int<lower=1> K; // Number of predictors
   vector<lower=0>[N] y; // Response variable (positive values)
   matrix[N, K] X; // Predictor matrix
-  
-  // prior hyperparameters
-  real beta1_loc;
-  real beta2_loc;
-  real<lower=0> beta1_scale;
-  real<lower=0> beta2_scale;
-  real<lower=0> theta_alpha;
-  real<lower=0> theta_beta;
-  real<lower=0> phi1_rate;
-  real<lower=0> phi2_rate;
 }
 parameters {
   real<lower=0, upper=1> theta; // Mixing proportions (must sum to 1)
@@ -35,12 +25,12 @@ model {
   }
   
   // Priors for regression coefficients and mix proportion
-  beta1 ~ normal(beta1_loc, beta1_scale);
-  beta2 ~ normal(beta2_loc, beta2_scale);
-  theta ~ beta(theta_alpha, theta_beta);
+  beta1 ~ normal(0, 5);
+  beta2 ~ normal(0, 5);
+  theta ~ beta(1, 1);
   // Priors for shape parameters
-  phi1 ~ exponential(phi1_rate);
-  phi2 ~ exponential(phi2_rate);
+  phi1 ~ exponential(1);
+  phi2 ~ exponential(1);
 }
 generated quantities {
   array[N] int<lower=1, upper=2> z; // Mixture membership
