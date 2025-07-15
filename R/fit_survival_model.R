@@ -100,14 +100,13 @@ fit_survival_model <- function(formula,
   pkg_path <- system.file(package = "LinksMixtureModeling")
   
   # Dynamically generate the appropriate stan file to use
-  stan_file <- generate_survival_stan(
-    p_family     = p_family,
-    formula      = formula,
-    data         = data,
-    truncation   = truncation,
-    status_column= status_column
-  )
-  
+  stan_file <- generate_survival_stan(p_family, 
+                                      formula, 
+                                      data, 
+                                      priors, 
+                                      truncation, 
+                                      status_column)
+
   # Prepare the data for Stan model
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")

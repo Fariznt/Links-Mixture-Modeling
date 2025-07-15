@@ -10,12 +10,15 @@
 generate_survival_stan <- function(p_family,
                                    formula,
                                    data,
+                                   priors,
                                    truncation    = 0,
                                    status_column = "status") {
-  # p_family argument validity check
-  if (!p_family %in% c("weibull","gamma")) {
-    stop("p_family must be 'weibull' or 'gamma'")
-  }
+  
+  # Process prior list to get variable and function definitions for concatenation
+  # during stan generation
+  definitions = get_stan_definitions(priors)
+  variable_definitions = definitions[["variable_defs"]]
+  function_definitions = definitions[["function_defs"]]
   
   model_frame <- stats::model.frame(formula, data)
   surv_obj    <- stats::model.response(model_frame)
@@ -27,6 +30,9 @@ generate_survival_stan <- function(p_family,
   
   if (p_family == "weibull") {
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
       "  int<lower=1> N;",
       "  int<lower=1> K;",
@@ -37,6 +43,11 @@ generate_survival_stan <- function(p_family,
       "  real<lower=0> truncation_lower;",
       "  real<lower=0> truncation_upper;",
       "}",
+      "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  vector[K] beta1;",
       "  vector[K] beta2;",
@@ -47,13 +58,13 @@ generate_survival_stan <- function(p_family,
       "  real<lower=0,upper=1> theta;",
       "}",
       "model {",
-      "  beta1 ~ normal(0, 2);",
-      "  beta2 ~ normal(0, 2);",
-      "  shape1 ~ gamma(2, 1);",
-      "  shape2 ~ gamma(2, 1);",
-      "  scale1 ~ gamma(2, 1);",
-      "  scale2 ~ gamma(2, 1);",
-      "  theta ~ beta(1, 1);",
+      "  beta1 ~ ", priors$beta1,";",
+      "  beta2 ~ ", priors$beta2,";",
+      "  shape1 ~ ", priors$shape1,";",
+      "  shape2 ~ ", priors$shape2,";",
+      "  scale1 ~ ", priors$scale1,";",
+      "  scale2 ~ ", priors$scale2,";",
+      "  theta ~ ", priors$theta,";",
       "  ",
       "  for (n in 1:N) {",
       "    real log_p1 = log(theta);",
@@ -97,12 +108,20 @@ generate_survival_stan <- function(p_family,
     
   } else {
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
       "  int<lower=1> N;               // Number of observations",
       "  int<lower=1> K;               // Number of predictors",
       "  vector<lower=0>[N] y;         // Response variable (positive values)",
       "  matrix[N, K] X;               // Predictor matrix",
       "}",
+      "",
+      "transformed data {",
+      variable_definitions, # defines any hyperparameter variables used in prior string
+      "}",
+      "",
       "parameters {",
       "  real<lower=0, upper=1> theta; // Mixing proportions (must sum to 1)",
       "  vector[K] beta1;              // Regression coefficients for component 1",
@@ -124,12 +143,12 @@ generate_survival_stan <- function(p_family,
       "  }",
       "",
       "  // Priors for regression coefficients and mix proportion",
-      "  beta1 ~ normal(0, 5);",
-      "  beta2 ~ normal(0, 5);",
-      "  theta ~ beta(1, 1);",
+      "  beta1 ~ ", priors$beta1,";",
+      "  beta2 ~ ", priors$beta2,";",
+      "  theta ~ ", priors$theta,";",
       "  // Priors for shape parameters",
-      "  phi1 ~ exponential(1);",
-      "  phi2 ~ exponential(1);",
+      "  phi1 ~ ", priors$phi1,";",
+      "  phi2 ~ ", priors$phi2,";",
       "}",
       "generated quantities {",
       "  array[N] int<lower=1, upper=2> z; // Mixture membership",
