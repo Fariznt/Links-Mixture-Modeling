@@ -83,11 +83,13 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
   
   pkg_path <- system.file(package = "LinksMixtureModeling")
   
-  # Choose the stan file based on family
-  stan_file <- switch(p_family,
-                      "weibull" = file.path(pkg_path, "stan", "gtweibull.stan"),
-                      "gamma" = file.path(pkg_path, "stan", "gtgamma.stan"),
-                      stop("Unknown family! Choose from: 'weibull' or 'gamma'")
+  # Dynamically generate the appropriate stan file to use
+  stan_file <- generate_survival_stan(
+    p_family     = p_family,
+    formula      = formula,
+    data         = data,
+    truncation   = truncation,
+    status_column= status_column
   )
   
   # Prepare the data for Stan model
@@ -113,7 +115,7 @@ fit_survival_model <- function(formula, p_family, data, result_type, iterations,
     X = X,
     y = y,
     status = status,
-    use_truncation = ifelse(truncation == 1, 1, 0),
+    use_truncation = truncation,
     truncation_lower = if(truncation == 1) 0 else 0.1,
     truncation_upper = if(truncation == 1) max(y) else max(y)*2
   )
