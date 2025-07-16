@@ -100,15 +100,15 @@ fit_model <-
     stop("Data should have at least one predictor and one response variable.")
   }
   
-  # Handle the formula
+  # Parse formula & data into response vector y and design matrix X
   model_frame <- model.frame(formula, data)
   y <- model.response(model_frame)
   X <- model.matrix(formula, model_frame)[, -1]
 
   # prepare data
   stan_data <- list(
-    N = nrow(data),
-    K = ncol(data) - 1,
+    N = nrow(data), # num of data points/observations
+    K = ncol(data) - 1, # num of predictors
     X = X,
     y = y
   )
