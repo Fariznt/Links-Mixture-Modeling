@@ -40,7 +40,7 @@
 #')
 #' }
 fit_model <- 
-  function(formula, 
+  function(formulas, 
            p_family, 
            data, 
            components, 
@@ -55,6 +55,11 @@ fit_model <-
     
   # Set default priors if some or all not passed in
   priors <- fill_defaults(priors, p_family, 'glm')
+  
+  # Correct/prepare user input when formulas is just 1 formula
+  if (!is.list(formulas)) { 
+    formulas <- list(formulas)
+  }
 
   # Parse seed and generate random if "random" passed in
   if (seed == "random") {
@@ -99,18 +104,43 @@ fit_model <-
   if (ncol(data) <= 1) {
     stop("Data should have at least one predictor and one response variable.")
   }
-  
-  # Parse formula & data into response vector y and design matrix X
-  model_frame <- model.frame(formula, data)
-  y <- model.response(model_frame)
-  X <- model.matrix(formula, model_frame)[, -1]
 
-  # prepare data
+  # Prepare data/formulas to pass into stan model
+  
+  # Initial declaration of stan data variables
+  N <- nrow(data)
+  M <- 0 
+  K_per_m <- integer(0) 
+  y_all <- matrix(nrow = N, ncol = 0) 
+  X_all <- matrix(nrow = N, ncol = 0) 
+  
+  # Continue constructing values of M, K_per_m, X_all, and y_all
+  for (i in length(formulas)) {
+    model_frame <- model.frame(formulas[[i]], data)
+    model_matrix <- model.matrix(formulas[[i]], model_frame)
+    
+    # increment num of response variables for each formula
+    M <- M + 1 
+    
+    # append predictor count for this formula onto vector of all predictor counters
+    predictor_count <- ncol(model_matrix) - 1 # -1 to disclude the intercept column
+    K_per_m <- c(K, predictor_count) 
+    
+    # append response vector for this formula (column-wise) to matrix of response vectors
+    y <- model.response(model_frame) # response vector for this formula
+    y_all <- cbind(y_all, y)
+    
+    # append predictor matrix for this formula (column-wise) to matrix of all predictors
+    X <- model_frame[, -1] # form matrix for this formula by dropping intercept column
+    X_all <- cbind(X_all, x)
+  }
+
   stan_data <- list(
-    N = nrow(data), # num of data points/observations
-    K = ncol(data) - 1, # num of predictors
-    X = X,
-    y = y
+    N = N, # num of observations
+    M = M, # num of response vars
+    K_per_m = K_per_m, # vector of predictors per response var
+    y_all = y_all, # matrix of response vectors
+    X_all = X_all # col-wise merged matrix of all predictor matrices
   )
 
   # Load the Stan model

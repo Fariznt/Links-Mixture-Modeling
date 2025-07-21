@@ -383,7 +383,7 @@ generate_stan <- function(components, formula, data, priors) {
   }
 }
 
-#' Process model results
+#' Process model results from fit object
 #'
 #' @param family Distribution family
 #' @param fit Stan fit object
