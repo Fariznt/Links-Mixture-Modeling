@@ -110,11 +110,10 @@ fit_model <-
   # Initial declaration of stan data variables
   N <- nrow(data)
   M <- 0 
-  K_per_m <- integer(0) 
-  y_all <- matrix(nrow = N, ncol = 0) 
-  X_all <- matrix(nrow = N, ncol = 0) 
-  K_sum <- 0
-  
+  K <- integer(0) 
+  y <- matrix(nrow = N, ncol = 0) 
+  X <- list()
+
   # Continue constructing values of M, K_per_m, X_all, and y_all
   for (i in length(formulas)) {
     model_frame <- model.frame(formulas[[i]], data)
@@ -125,27 +124,23 @@ fit_model <-
     
     # append predictor count for this formula onto vector of all predictor counters
     predictor_count <- ncol(model_matrix) - 1 # -1 to disclude the intercept column
-    K_per_m <- c(K, predictor_count) 
+    K <- c(K, predictor_count) 
     
-    # Add to sum of total predictors
-    K_sum <- K_sum + predictor_count
+    # append response vector for current formula (column-wise) to matrix of response vectors
+    response_vector <- model.response(model_frame) # response vector for this formula
+    y <- cbind(y, response_vector)
     
-    # append response vector for this formula (column-wise) to matrix of response vectors
-    y <- model.response(model_frame) # response vector for this formula
-    y_all <- cbind(y_all, y)
-    
-    # append predictor matrix for this formula (column-wise) to matrix of all predictors
-    X <- model_frame[, -1] # form matrix for this formula by dropping intercept column
-    X_all <- cbind(X_all, x)
+    # append to array of predictor matrices the matrix for current formula
+    predictor_matrix <- model_frame[, -1] # form predictor matrix
+    X[[length(X) + 1]] <- predictor_matrix # append to list
   }
 
   stan_data <- list(
     N = N, # num of observations
     M = M, # num of response vars
-    K_per_m = K_per_m, # vector of predictors per response var
-    y_all = y_all, # matrix of response vectors
-    X_all = X_all, # col-wise merged matrix of all predictor matrices
-    K_sum = K_sum # total num of predictors
+    K = K, # collection of predictors per response var
+    y = y, # matrix of response vectors
+    X = X, # collection of predictor matrices
   )
 
   # Load the Stan model
