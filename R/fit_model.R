@@ -113,6 +113,7 @@ fit_model <-
   K_per_m <- integer(0) 
   y_all <- matrix(nrow = N, ncol = 0) 
   X_all <- matrix(nrow = N, ncol = 0) 
+  K_sum <- 0
   
   # Continue constructing values of M, K_per_m, X_all, and y_all
   for (i in length(formulas)) {
@@ -125,6 +126,9 @@ fit_model <-
     # append predictor count for this formula onto vector of all predictor counters
     predictor_count <- ncol(model_matrix) - 1 # -1 to disclude the intercept column
     K_per_m <- c(K, predictor_count) 
+    
+    # Add to sum of total predictors
+    K_sum <- K_sum + predictor_count
     
     # append response vector for this formula (column-wise) to matrix of response vectors
     y <- model.response(model_frame) # response vector for this formula
@@ -140,7 +144,8 @@ fit_model <-
     M = M, # num of response vars
     K_per_m = K_per_m, # vector of predictors per response var
     y_all = y_all, # matrix of response vectors
-    X_all = X_all # col-wise merged matrix of all predictor matrices
+    X_all = X_all, # col-wise merged matrix of all predictor matrices
+    K_sum = K_sum # total num of predictors
   )
 
   # Load the Stan model
