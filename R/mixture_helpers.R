@@ -116,13 +116,8 @@ generate_stan <- function(components, formula, data, priors) {
   
   # checks that inputs are as expected
   if (identical(components, c("linear", "linear"))) {
-    model_frame <- stats::model.frame(formula, data)
-    y <- stats::model.response(model_frame)
-    X <- stats::model.matrix(formula, model_frame)[, -1, drop = FALSE]
-    K <- ncol(X)
-    N <- nrow(X)
-  
-    # Fixed Stan code for linear-linear mixture
+    
+    # Linear-linear mixture code
     stan_code <- paste(
       "functions {",
       function_definitions,
@@ -130,9 +125,10 @@ generate_stan <- function(components, formula, data, priors) {
       "data {",
       "  int<lower=1> N;                 // Number of data points",
       "  int<lower=1> M;                 // Number of response variables",
-      "  array[M] int<lower=1> K;        // Array of predictor counts for each response",
-      "  matrix[N, M] y;                 // Matrix of M response variables",
-      "  array[M] matrix[N, K[m]] X;     // Array of predictor matrices",
+      "  matrix[N, M] y_all;             // Matrix of M response variables",
+      "  array[M] int<lower=1> K_per_m;  // Array of predictor counts for each response",
+      "  int<lower=1> K_sum;             // Sum of all values in K; total predictor count",
+      "  matrix[N, K_sum] X_all;        // All predictor matrices combined column-wise",
       "}",
       "",
       "transformed data {",
@@ -145,8 +141,8 @@ generate_stan <- function(components, formula, data, priors) {
       "  vector[M] mu2;                 // Means of the second component",
       "  vector<lower=0>[M] sigma1;     // Standard deviations of the first component",
       "  vector<lower=0>[M] sigma2;     // Standard deviations of the second component",
-      "  array[M] vector[K[m]] beta1;   // Regression coefficients for the first component",
-      "  array[M] vector[K[m]] beta2;   // Regression coefficients for the second component",
+      "  vector[K_sum] beta1_flat;      // Regression coefficients for the first component",
+      "  vector[K_sum] beta2_flat;      // Regression coefficients for the second component",
       "}",
       "model {",
       "  // Priors",
@@ -154,19 +150,22 @@ generate_stan <- function(components, formula, data, priors) {
       "  mu2 ~ ", priors$mu2, ";",
       "  sigma1 ~ ", priors$sigma1, ";",
       "  sigma2 ~ ", priors$sigma2, ";",
-      "  for (m in 1:M) {",
-      "    beta1[m] ~ ", priors$beta1, ";",
-      "    beta2[m] ~ ", priors$beta2, ";",
-      "  }",
+      "  beta1_flat ~", priors$beta1, ";",
+      "  beta2_flat ~", priors$beta2, ";",
       "  theta ~ ", priors$theta, ";",
       "",
       "  // Mixture model likelihood",
       "  for (n in 1:N) {",
       "    real log_prob_comp1 = log(theta);",
       "    real log_prob_comp2 = log1m(theta);",
+      "    int current_pos = 1;",
       "    for (m in 1:M) {",
-      "      log_prob_comp1 += normal_lpdf(y[n, m] | mu1[m] + X[m][n, ] * beta1[m], sigma1[m]);",
-      "      log_prob_comp2 += normal_lpdf(y[n, m] | mu2[m] + X[m][n, ] * beta2[m], sigma2[m]);",
+      "      row_vector[K_per_m[m]] X_n_m = X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta1_m = beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta2_m = beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      log_prob_comp1 += normal_lpdf(y_all[n, m] | mu1[m] + X_n_m * beta1_m, sigma1[m]);",
+      "      log_prob_comp2 += normal_lpdf(y_all[n, m] | mu2[m] + X_n_m * beta2_m, sigma2[m]);",
+      "      current_pos += K_per_m[m];",
       "    }",
       "    target += log_sum_exp(log_prob_comp1, log_prob_comp2);",
       "  }",
@@ -176,9 +175,14 @@ generate_stan <- function(components, formula, data, priors) {
       "  for (n in 1:N) {",
       "    real log_prob1 = log(theta);",
       "    real log_prob2 = log1m(theta);",
+      "    int current_pos = 1;",
       "    for (m in 1:M) {",
-      "      log_prob1 += normal_lpdf(y[n, m] | mu1[m] + X[m][n, ] * beta1[m], sigma1[m]);",
-      "      log_prob2 += normal_lpdf(y[n, m] | mu2[m] + X[m][n, ] * beta2[m], sigma2[m]);",
+      "      row_vector[K_per_m[m]] X_n_m = X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta1_m = beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta2_m = beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      log_prob1 += normal_lpdf(y_all[n, m] | mu1[m] + X_n_m * beta1_m, sigma1[m]);",
+      "      log_prob2 += normal_lpdf(y_all[n, m] | mu2[m] + X_n_m * beta2_m, sigma2[m]);",
+      "      current_pos += K_per_m[m];",
       "    }",
       "    vector[2] log_probs;",
       "    log_probs[1] = log_prob1;",
@@ -196,12 +200,6 @@ generate_stan <- function(components, formula, data, priors) {
     return(stan_file)
     
   } else if (identical(components, c("poisson", "poisson"))) {
-    model_frame <- model.frame(formula, data)
-    y <- model.response(model_frame)
-    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]
-    K <- ncol(X)
-    N <- nrow(X)
-    
     # Poisson-Poisson mixture code
     stan_code <- paste(
       "data {",
@@ -326,12 +324,6 @@ generate_stan <- function(components, formula, data, priors) {
     return(stan_file)
     
   } else if (identical(components, c("logistic", "logistic"))) {
-    model_frame <- model.frame(formula, data)
-    y <- model.response(model_frame)
-    X <- model.matrix(formula, model_frame)[, -1, drop = FALSE]  # Remove intercept
-    K <- ncol(X)
-    N <- nrow(X)
-    
     # Logistic-logistic mixture Stan code
     stan_code <- paste(
       "data {",
@@ -413,7 +405,7 @@ get_mixture_results <- function(family, fit, return_type) {
   }
 
   if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
-  stop("Error: Missing expected parameters in posterior")
+  stop("Error: Missing expected parameters in posterior", posterior$z, posterior$beta1, posterior$beta2, "end") #TODO fix this line
   }
 
   # helper function for flipping z_samples and processing params
