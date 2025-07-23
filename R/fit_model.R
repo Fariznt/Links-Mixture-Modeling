@@ -133,7 +133,7 @@ fit_model <-
     y_all <- cbind(y_all, y)
     
     # append predictor matrix for this formula (column-wise) to matrix of all predictors
-    X <- as.matrix(model_matrix[, -1, drop = FALSE]) # form matrix for this formula by dropping intercept column
+    X <- model_matrix[, -1, drop = FALSE] # form matrix for this formula by dropping intercept column
     X_all <- cbind(X_all, X) # append to merged matrix
   }
 
@@ -141,7 +141,7 @@ fit_model <-
     N = N, # num of observations
     M = M, # num of response vars
     y_all = y_all, # matrix of response vectors
-    K_per_m = K_per_m, # vector of predictors per response var
+    K_per_m = array(K_per_m), # vector of predictors per response var
     X_all = X_all, # col-wise merged matrix of all predictor matrices
     K_sum = K_sum # total num of predictors
     # TODO: probably possible to remove K_sum, and calculate in stan

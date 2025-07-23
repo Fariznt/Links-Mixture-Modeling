@@ -32,6 +32,7 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
     sigma2 <- 2
     
     X <- cbind(1, runif(N, -2, 2))
+    
     z <- rbinom(N, size = 1, prob = 0.8) + 1  # true link (z=1) or false link (z=2)
     z <- ifelse(z == 1, 0, 1)
     y <- numeric(N)
@@ -393,8 +394,8 @@ generate_stan <- function(components, formula, data, priors) {
 get_mixture_results <- function(family, fit, return_type) {
   posterior <- extract(fit)
   z_samples <- posterior$z            # get z-samples from fit
-  beta1.p <- posterior$beta1          # get beta1 from fit
-  beta2.p <- posterior$beta2          # get bata2 from fit
+  beta1.p <- posterior$beta1_flat          # get beta1 from fit
+  beta2.p <- posterior$beta2_flat          # get bata2 from fit
   
   if (family == "gamma") {
     phi1.p <- posterior$phi1
