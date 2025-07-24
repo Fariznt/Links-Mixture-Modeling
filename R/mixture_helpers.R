@@ -203,53 +203,84 @@ generate_stan <- function(components, formula, data, priors) {
   } else if (identical(components, c("poisson", "poisson"))) {
     # Poisson-Poisson mixture code
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
-      "  int<lower=1> N;             // Number of observations",
-      "  int<lower=0> y[N];          // Poisson response variable (counts)",
-      "  int<lower=1> K;             // Number of predictors",
-      "  matrix[N, K] X;             // Predictor matrix",
+      "  int<lower=1> N;                 // Number of data points",
+      "  int<lower=1> M;                 // Number of response variables",
+      "  int<lower=0> y_all[N,M];        // Poisson counts (N obs × M responses)",
+      "  array[M] int<lower=1> K_per_m;  // Array of predictor counts for each response",
+      "  int<lower=1> K_sum;             // Sum of all values in K; total predictor count",
+      "  matrix[N, K_sum] X_all;         // All predictor matrices combined column-wise",
       "}",
       "",
       "transformed data {",
-      variable_definitions, # defines any hyperparameter variables used in prior string
+      variable_definitions,
       "}",
       "",
       "parameters {",
-      "  real<lower=0, upper=1> theta;           // Mixing proportions (constrained to sum to 1)",
-      "  vector[K] beta1;            // Regression coefficients for component 1",
-      "  vector[K] beta2;            // Regression coefficients for component 2",
+      "  real<lower=0, upper=1> theta;  // Mixing proportions (constrained to sum to 1)",
+      "  vector[K_sum] beta1_flat;      // concatenated betas for comp 1",
+      "  vector[K_sum] beta2_flat;      // concatenated betas for comp 2",
       "}",
       "model {",
-      "  vector[N] log_lik1;         // Log-likelihood for component 1",
-      "  vector[N] log_lik2;         // Log-likelihood for component 2",
-      "  ",
-      "  // Linear predictors for each component",
-      "  vector[N] eta1 = X * beta1; // Linear predictor for component 1",
-      "  vector[N] eta2 = X * beta2; // Linear predictor for component 2",
-      "",
-      "  // Calculate log-likelihoods for each component",
-      "  for (n in 1:N) {",
-      "    log_lik1[n] = poisson_log_lpmf(y[n] | eta1[n]); // Component 1",
-      "    log_lik2[n] = poisson_log_lpmf(y[n] | eta2[n]); // Component 2",
-      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
-      "  }",
-      "",
-      "  // Priors for regression coefficients",
-      "  beta1 ~ ", priors$beta1, ";",
-      "  beta2 ~ ", priors$beta2, ";",
+      "  // Priors",
+      "  beta1_flat ~ ", priors$beta1, ";",
+      "  beta2_flat ~ ", priors$beta2, ";",
       "  theta ~ ", priors$theta, ";",
+      "",
+      "  // Mixture model likelihood",
+      "  for (n in 1:N) {",
+      "    real log_prob_comp1 = log(theta);",
+      "    real log_prob_comp2 = log1m(theta);",
+      "    int current_pos = 1;",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_n_m = X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta1_m = beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta2_m = beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "",
+      "      // log-rate (eta) for each component",
+      "      real eta1 = dot_product(X_n_m, beta1_m);",
+      "      real eta2 = dot_product(X_n_m, beta2_m);",
+      "",
+      "      //add each equation's contribution",
+      "      log_prob_comp1 += poisson_log_lpmf(y_all[n, m] | eta1);",
+      "      log_prob_comp2 += poisson_log_lpmf(y_all[n, m] | eta2);",
+      "",
+      "      current_pos += K_per_m[m];",
+      "    }",
+      "    target += log_sum_exp(log_prob_comp1, log_prob_comp2);",
+      "  }",
       "}",
       "",
       "generated quantities {",
       "  int<lower=1, upper=2> z[N];    // Mixture membership",
       "  for (n in 1:N) {",
-      "    // Calculate unnormalized log probabilities for each component",
-      "    real log_prob1 = log(theta) + poisson_log_lpmf(y[n] | X[n] * beta1);",
-      "    real log_prob2 = log1m(theta) + poisson_log_lpmf(y[n] | X[n] * beta2);",
-      "    ",
+      "  // initialize log‑probs for the two components",
+      "    real log_prob1 = log(theta);",
+      "    real log_prob2 = log1m(theta);",
+      "    int current_pos = 1;",
+      "",
+      "    // accumulate each formula’s contribution",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_n_m = X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta1_m = beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] beta2_m = beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "",
+      "      real eta1 = dot_product(X_n_m, beta1_m);",
+      "      real eta2 = dot_product(X_n_m, beta2_m);",
+      "",
+      "      log_prob1 += poisson_log_lpmf(y_all[n, m] | eta1);",
+      "      log_prob2 += poisson_log_lpmf(y_all[n, m] | eta2);",
+      "",
+      "      current_pos += K_per_m[m];",
+      "    }",
+      "    vector[2] log_probs = [log_prob1, log_prob2]';",
+      "",
       "    // Normalize probabilities using softmax",
-      "    vector[2] prob = softmax([log_prob1, log_prob2]');",
-      "    ",
+      "    vector[2] prob = softmax(log_probs);",
+      "",
       "    // Sample z[n] based on the posterior probabilities",
       "    z[n] = categorical_rng(prob);",
       "  }",
@@ -257,65 +288,86 @@ generate_stan <- function(components, formula, data, priors) {
       sep = "\n"
     )
     stan_file <- "gtmix_poisson.stan"
-    writeLines(stan_code, stan_file)
+    writeLines(c(stan_code, ""), stan_file)
     return(stan_file)
     
   } else if (identical(components, c("gamma", "gamma"))) {
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
-      "  int<lower=1> N;               // Number of observations",
-      "  int<lower=1> K;               // Number of predictors",
-      "  vector<lower=0>[N] y;         // Response variable (positive values)",
-      "  matrix[N, K] X;               // Predictor matrix",
+      "  int<lower=1> N;                 // Number of data points",
+      "  int<lower=1> M;                 // Number of response variables",
+      "  matrix<lower=0>[N, M] y_all;     // Positive responses for each obs × formula",
+      "  array[M] int<lower=1> K_per_m;   // Array of predictor counts per response",
+      "  int<lower=1> K_sum;             // Total number of predictors",
+      "  matrix[N, K_sum] X_all;         // All predictor matrices combined",
       "}",
       "",
       "transformed data {",
-      variable_definitions, # defines any hyperparameter variables used in prior string
+      variable_definitions,          # any hyper‐params you defined
       "}",
       "",
       "parameters {",
-      "  real<lower=0, upper=1> theta; // Mixing proportions (must sum to 1)",
-      "  vector[K] beta1;              // Regression coefficients for component 1",
-      "  vector[K] beta2;              // Regression coefficients for component 2",
-      "  real<lower=0> phi1;           // Shape parameter for component 1",
-      "  real<lower=0> phi2;           // Shape parameter for component 2",
+      "  real<lower=0,upper=1> theta;      // Mixture weight",
+      "  vector[K_sum] beta1_flat;        // Flattened betas for comp1",
+      "  vector[K_sum] beta2_flat;        // Flattened betas for comp2",
+      "  vector<lower=0>[M] phi1;         // Shape params for comp1",
+      "  vector<lower=0>[M] phi2;         // Shape params for comp2",
       "}",
+      "",
       "model {",
-      "  vector[N] mu1 = exp(X * beta1);  // Mean of Gamma for component 1",
-      "  vector[N] mu2 = exp(X * beta2);  // Mean of Gamma for component 2",
-      "  vector[N] log_lik1;",
-      "  vector[N] log_lik2;",
-      "",
-      "  // Calculate log-likelihoods for each component",
-      "  for (n in 1:N) {",
-      "    log_lik1[n] = gamma_lpdf(y[n] | phi1, phi1 / mu1[n]);",
-      "    log_lik2[n] = gamma_lpdf(y[n] | phi2, phi2 / mu2[n]);",
-      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
-      "  }",
-      "",
-      "  // Priors for regression coefficients and mix proportion",
-      "  beta1 ~ ", priors$beta1, ";",
-      "  beta2 ~ ", priors$beta2, ";",
+      "  // Priors",
+      "  beta1_flat ~ ", priors$beta1, ";",
+      "  beta2_flat ~ ", priors$beta2, ";",
       "  theta ~ ", priors$theta, ";",
-      "  // Priors for shape parameters",
       "  phi1 ~ ", priors$phi1, ";",
       "  phi2 ~ ", priors$phi2, ";",
+      "",
+      "  // Mixture‐model likelihood",
+      "  for (n in 1:N) {",
+      "    real log_prob_comp1 = log(theta);",
+      "    real log_prob_comp2 = log1m(theta);",
+      "    int current_pos = 1;",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_n_m = ",
+      "        X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b1 = ",
+      "        beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b2 = ",
+      "        beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      real mu1 = exp(dot_product(X_n_m, b1));",
+      "      real mu2 = exp(dot_product(X_n_m, b2));",
+      "      log_prob_comp1 += gamma_lpdf(y_all[n, m] | phi1[m], phi1[m] / mu1);",
+      "      log_prob_comp2 += gamma_lpdf(y_all[n, m] | phi2[m], phi2[m] / mu2);",
+      "      current_pos += K_per_m[m];",
+      "    }",
+      "    target += log_sum_exp(log_prob_comp1, log_prob_comp2);",
+      "  }",
       "}",
       "",
       "generated quantities {",
-      "  int<lower=1, upper=2> z[N];    // Mixture membership",
-      "  vector[N] mu1 = exp(X * beta1);  // Recompute mu1 for generated quantities",
-      "  vector[N] mu2 = exp(X * beta2);  // Recompute mu2 for generated quantities",
+      "  int<lower=1,upper=2> z[N];        // Mixture membership",
       "  for (n in 1:N) {",
-      "    // Calculate unnormalized log probabilities for each component",
-      "    real log_prob1 = log(theta) + gamma_lpdf(y[n] | phi1, phi1 / mu1[n]);",
-      "    real log_prob2 = log1m(theta) + gamma_lpdf(y[n] | phi2, phi2 / mu2[n]);",
-      "    ",
-      "    // Normalize probabilities using softmax",
-      "    vector[2] prob = softmax([log_prob1, log_prob2]');",
-      "    ",
-      "    // Sample z[n] based on the posterior probabilities",
-      "    z[n] = categorical_rng(prob);",
+      "    real log_prob1 = log(theta);",
+      "    real log_prob2 = log1m(theta);",
+      "    int current_pos = 1;",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_n_m = ",
+      "        X_all[n, current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b1 = ",
+      "        beta1_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b2 = ",
+      "        beta2_flat[current_pos:(current_pos + K_per_m[m] - 1)];",
+      "      real mu1 = exp(dot_product(X_n_m, b1));",
+      "      real mu2 = exp(dot_product(X_n_m, b2));",
+      "      log_prob1 += gamma_lpdf(y_all[n, m] | phi1[m], phi1[m] / mu1);",
+      "      log_prob2 += gamma_lpdf(y_all[n, m] | phi2[m], phi2[m] / mu2);",
+      "      current_pos += K_per_m[m];",
+      "    }",
+      "    vector[2] log_probs = [log_prob1, log_prob2]';",
+      "    z[n] = categorical_rng(softmax(log_probs));",
       "  }",
       "}",
       sep = "\n"
@@ -325,56 +377,84 @@ generate_stan <- function(components, formula, data, priors) {
     return(stan_file)
     
   } else if (identical(components, c("logistic", "logistic"))) {
-    # Logistic-logistic mixture Stan code
+    # Logistic–Logistic mixture code (multi‐formula)
     stan_code <- paste(
+      "functions {",
+      function_definitions,
+      "}",
       "data {",
-      "  int<lower=1> N;           // Number of observations",
-      "  int<lower=1> K;           // Number of predictors",
-      "  matrix[N, K] X;           // Predictor matrix",
-      "  int<lower=0, upper=1> y[N]; // Binary outcome",
+      "  int<lower=1> N;                 // Number of observations",
+      "  int<lower=1> M;                 // Number of response variables",
+      "  int<lower=0,upper=1> y_all[N,M]; // Binary outcomes for each obs×response",
+      "  array[M] int<lower=1> K_per_m;  // Predictors per response",
+      "  int<lower=1> K_sum;             // Total predictors across all formulas",
+      "  matrix[N, K_sum] X_all;         // Combined predictor matrix (col‑wise)",
       "}",
       "",
       "transformed data {",
-      variable_definitions, # defines any hyperparameter variables used in prior string
+      variable_definitions,
       "}",
       "",
       "parameters {",
-      "  real<lower=0, upper=1> theta;     // Mixing proportion (for component 1)",
-      "  vector[K] beta1;                 // Regression coefficients for component 1",
-      "  vector[K] beta2;                 // Regression coefficients for component 2",
+      "  real<lower=0,upper=1> theta;    // Mixing weight",
+      "  vector[K_sum] beta1_flat;       // All comp‑1 betas concatenated",
+      "  vector[K_sum] beta2_flat;       // All comp‑2 betas concatenated",
       "}",
+      "",
       "model {",
-      "  vector[N] log_lik1;  // Log-likelihood contributions from component 1",
-      "  vector[N] log_lik2;  // Log-likelihood contributions from component 2",
-      "",
       "  // Priors",
-      "  // Uniform prior on mixing proportion:",
-      "  theta ~ ", priors$theta, ";",
-      "  // Prior for regression coefficients (component 1):",
-      "  beta1 ~ ", priors$beta1, ";",
-      "  // Prior for regression coefficients (component 2):",
-      "  beta2 ~ ", priors$beta2, ";",
+      "  beta1_flat ~ ", priors$beta1, ";",
+      "  beta2_flat ~ ", priors$beta2, ";",
+      "  theta      ~ ", priors$theta,  ";",
       "",
-      "  // Mixture model likelihood",
+      "  // Mixture likelihood",
       "  for (n in 1:N) {",
-      "    log_lik1[n] = bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta1));",
-      "    log_lik2[n] = bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta2));",
-      "    target += log_mix(theta, log_lik1[n], log_lik2[n]);",
+      "    real log_p1 = log(theta);",
+      "    real log_p2 = log1m(theta);",
+      "    int pos = 1;",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_nm = ",
+      "        X_all[n, pos:(pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b1 = ",
+      "        beta1_flat[pos:(pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b2 = ",
+      "        beta2_flat[pos:(pos + K_per_m[m] - 1)];",
+      "      log_p1 += bernoulli_logit_lpmf(y_all[n,m] | ",
+      "                          dot_product(X_nm, b1));",
+      "      log_p2 += bernoulli_logit_lpmf(y_all[n,m] | ",
+      "                          dot_product(X_nm, b2));",
+      "      pos += K_per_m[m];",
+      "    }",
+      "    target += log_sum_exp(log_p1, log_p2);",
       "  }",
       "}",
       "",
       "generated quantities {",
-      "  int<lower=1, upper=2> z[N];      // Mixture membership for each observation",
+      "  int<lower=1,upper=2> z[N];",
       "  for (n in 1:N) {",
-      "    vector[2] log_weights;",
-      "    log_weights[1] = log(theta) + bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta1));",
-      "    log_weights[2] = log1m(theta) + bernoulli_logit_lpmf(y[n] | dot_product(X[n], beta2));",
-      "    z[n] = categorical_rng(softmax(log_weights)); // Sample membership",
+      "    real lp1 = log(theta);",
+      "    real lp2 = log1m(theta);",
+      "    int pos = 1;",
+      "    for (m in 1:M) {",
+      "      row_vector[K_per_m[m]] X_nm = ",
+      "        X_all[n, pos:(pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b1 = ",
+      "        beta1_flat[pos:(pos + K_per_m[m] - 1)];",
+      "      vector[K_per_m[m]] b2 = ",
+      "        beta2_flat[pos:(pos + K_per_m[m] - 1)];",
+      "      lp1 += bernoulli_logit_lpmf(y_all[n,m] | ",
+      "                         dot_product(X_nm, b1));",
+      "      lp2 += bernoulli_logit_lpmf(y_all[n,m] | ",
+      "                         dot_product(X_nm, b2));",
+      "      pos += K_per_m[m];",
+      "    }",
+      "    vector[2] lps = [lp1, lp2]';",
+      "    vector[2] probs = softmax(lps);",
+      "    z[n] = categorical_rng(probs);",
       "  }",
       "}",
       sep = "\n"
     )
-    
     stan_file <- "gtmix_logistic.stan"
     writeLines(stan_code, stan_file)
     return(stan_file)
@@ -404,11 +484,8 @@ get_mixture_results <- function(family, fit, return_type) {
     phi1.p <- NULL
     phi2.p <- NULL
   }
-
-  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
-  stop("Error: Missing expected parameters in posterior", posterior$z, posterior$beta1, posterior$beta2, "end") #TODO fix this line
-  }
-
+  
+  
   # helper function for flipping z_samples and processing params
   process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
     # Flip z_samples (0 -> 1, 1 -> 0)
@@ -419,7 +496,7 @@ get_mixture_results <- function(family, fit, return_type) {
         temp <- beta1.p[i, ]
         beta1.p[i, ] <- beta2.p[i, ]
         beta2.p[i, ] <- temp
-
+        
         if (!is.null(phi1.p) && !is.null(phi2.p)) {  # Check if family is gamma
           temp_phi <- phi1.p[i]
           phi1.p[i] <- phi2.p[i]
@@ -428,14 +505,14 @@ get_mixture_results <- function(family, fit, return_type) {
       }
     }
     
-      # Calculate statistics
-      mean_beta1 <- apply(beta1.p, 2, mean)
-      mean_beta2 <- apply(beta2.p, 2, mean)
-      var_beta1 <- apply(beta1.p, 2, var)
-      var_beta2 <- apply(beta2.p, 2, var)
-      ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
-      ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
-
+    # Calculate statistics
+    mean_beta1 <- apply(beta1.p, 2, mean)
+    mean_beta2 <- apply(beta2.p, 2, mean)
+    var_beta1 <- apply(beta1.p, 2, var)
+    var_beta2 <- apply(beta2.p, 2, var)
+    ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+    ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
+    
     if (return_type == 0) {
       print("Printing z_samples matrix:")
       print(z_samples)  # Print the matrix z_samples
@@ -451,14 +528,14 @@ get_mixture_results <- function(family, fit, return_type) {
     }
     
     return(list(
-        z_samples = z_samples,
-        mean_beta1 = mean_beta1,
-        mean_beta2 = mean_beta2,
-        var_beta1 = var_beta1,
-        var_beta2 = var_beta2,
-        ci_beta1 = ci_beta1,
-        ci_beta2 = ci_beta2
-      ))
+      z_samples = z_samples,
+      mean_beta1 = mean_beta1,
+      mean_beta2 = mean_beta2,
+      var_beta1 = var_beta1,
+      var_beta2 = var_beta2,
+      ci_beta1 = ci_beta1,
+      ci_beta2 = ci_beta2
+    ))
   }
   # Call process_parameters helper function
   result_list <- process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)

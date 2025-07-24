@@ -46,7 +46,8 @@ fill_defaults <- function(priors = list(), p_family, model_type = 'glm') {
       "gamma" = list(
         beta1 = "normal(0,5)",
         beta2 = "normal(0,5)",
-        shape = "gamma(2,0.1)",
+        phi1 = "gamma(2,0.1)",
+        phi2 = "gamma(2,0.1)",
         theta = "beta(1,1)"
       ),
       stop("`p_family` must be one of 'linear','poisson','logistic','gamma'",
