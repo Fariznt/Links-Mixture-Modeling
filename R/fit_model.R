@@ -79,22 +79,26 @@ fit_model <-
     data <- generate_synthetic_mixture_data(p_family, seed)
     print(head(data))  # first few rows of generated data
     print(dim(data))   # dimensions of generated data
-  } else {
+  } else if (is.character(data) && length(data) == 1){
+    # data is a fie path
     if (!file.exists(data)) {
       stop("Error: The specified CSV file does not exist.")
-    } else {
-      data <- read.csv(data)
+    }
+    data <- read.csv(data)
       if (anyNA(data)) {
         na_locations <- which(is.na(data), arr.ind = TRUE)  # Get row and column locations of NA values
         stop("Error: NA values found in the data. Locations of NA values:\n", 
-             paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
+            paste("Row:", na_locations[, 1], "Column:", na_locations[, 2], collapse = "\n"))
       }
-    }
-  }
-
-  # Check for missing data
-  if (!is.data.frame(data) || nrow(data) == 0) {
-    stop("The input data is not a valid data frame or is empty.")
+    
+  } else if (is.data.frame(data)) {
+    # already a data.frame — nothing to do
+  
+  } else {
+    stop("`data` must be either:\n",
+         "\"random\"\n",
+         "A single string path to a CSV file\n",
+         "A data.frame")
   }
 
   # Generate stan file

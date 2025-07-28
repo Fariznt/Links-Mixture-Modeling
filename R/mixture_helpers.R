@@ -485,6 +485,9 @@ get_mixture_results <- function(family, fit, return_type) {
     phi2.p <- NULL
   }
   
+  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
+    stop("Error: Missing expected parameters in posterior", posterior$z, posterior$beta1, posterior$beta2, "end") #TODO fix this line
+  }
   
   # helper function for flipping z_samples and processing params
   process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
