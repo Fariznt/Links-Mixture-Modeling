@@ -485,6 +485,9 @@ get_mixture_results <- function(family, fit, return_type) {
     phi2.p <- NULL
   }
   
+  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
+    stop("Error: Missing expected parameters in posterior", posterior$z, posterior$beta1, posterior$beta2, "end") #TODO fix this line
+  }
   
   # helper function for flipping z_samples and processing params
   process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
@@ -542,4 +545,158 @@ get_mixture_results <- function(family, fit, return_type) {
   return(result_list)
 }
 
+# TODO finish function below and remove get_mixture_helpers. this is designed
+# as a successor/rewrite
+# TODO possibly add silent/print switch
 
+#' Process model results from fit object and generate summaries
+#'
+#' @param family Distribution family
+#' @param fit Stan fit object
+#' @param formulas List of formulas used on the stan model
+#' @param assignment_mat Includes raw posterior latent assignment matrix if true
+#' @param membership_prob Includes posterior component membership probability of each row if true
+#' @param stats Includes parameter statistics if true
+#' @param print_info Prints results if true, otherwise returns as list of data frames only
+#' @return Processed results depending on return_type
+#' @keywords internal
+process_results <- function(family, fit, formulas,
+                            assignment_mat = FALSE, 
+                            membership_prob = TRUE, 
+                            stats = TRUE,
+                            print_info = FALSE) {
+  # Verify sampler did not fail before processing
+  
+  
+  results <- list() # Holds all processed values
+  
+  # Extract results from fit
+  posterior <- extract(fit)
+  z_samples <- posterior$z
+  beta1_flat <- posterior$beta1_flat
+  beta2_flat <- posterior$beta2_flat
+  
+  # Process formulas into usable format for summary generation
+  processed_formulas <- setNames(
+    # list values (list of predictors)
+    lapply(formulas, function(f) all.vars(f[[3]])), # f pulls out all RHS vars (predictors) in formula list
+    # list keys (response vars)
+    vapply(formulas, function(g) as.character(g[[2]]), "") # g pulls out all LHS vars (response vars)
+  )
+  
+  
+  # <-- Make raw posterior latent assignment matrix --> 
+  # TODO might not be needed
+  
+  # <-- Posterior component membership probability table -->
+  
+  
+  # <-- Parameter statistics tables -->
+  # Process flat variables
+  beta1_list <- list() # list index corresponds to response variable...
+  beta2_list <- list() # ...w/ each element's col = predictor, row=iteration
+  
+  predictor_counts <- lengths(processed_formulas)
+  response_count <- length(predictor_counts)
+  pos = 1
+  for (response_var in names(processed_formulas)) {
+    predictor_count <- length(processed_formulas[[response_var]])
+    beta1_list[[response_var]] <- beta1_flat[, pos:(pos + predictor_count - 1)]
+    beta2_list[[response_var]] <- beta2_flat[, pos:(pos + predictor_count - 1)]
+    pos <- pos + predictor_count
+  }
+  
+  # Process parameter statistics 
+  print(posterior$phi1) #TODO Remove
+  
+  param_stats <- list()
+  for (response_var in names(processed_formulas)) {
+    param_stats[[response_var]] = list()
+    
+    # <- Process betas ->
+    preds <- processed_formulas[[response_var]]
+    num_of_preds <- length(preds)
+
+    # Make empty data frames to load
+    comp1_beta_summary <- summary_template(preds, num_of_preds) 
+    comp2_beta_summary <- summary_template(preds, num_of_preds)
+    
+    # populate the data frames with beta summary stats by row
+    for (r in seq_along(preds)) {
+      # add stats as row to 1st component
+      comp1_beta_summary[r, ] <- get_stats(beta1_list[[response_var]][, r])
+      # add stats as row to 2nd component
+      comp2_beta_summary[r, ] <- get_stats(beta2_list[[response_var]][, r])
+    }
+    
+    # Add to results
+    param_stats[[response_var]][["component1_beta_summary"]] <- comp1_beta_summary
+    param_stats[[response_var]][["component2_beta_summary"]] <- comp2_beta_summary
+    
+    # <- Process phis ->
+    if (family == "gamma") { # TODO: TEST. untested block until gamma model is fixed.
+      index = which(names(processed_formulas) == response_var)
+      
+      comp1_phi_summary <- summary_template("shape", 1)
+      comp1_phi_summary[1, ] <- get_stats(posterior$phi1[[index]]) 
+      
+      comp2_phi_summary <- summary_template("shape", 1)
+      comp2_phi_summary[1, ] <- get_stats(posterior$phi2[[index]]) 
+      
+      param_stats[[response_var]][["component1_phi_summary"]] <- comp1_phi_summary
+      param_stats[[response_var]][["component2_phi_summary"]] <- comp2_phi_summary
+    }
+  }
+
+  
+  if (stats) {
+    results <- c(results, param_stats)
+  }
+  
+  # <-- Deliver to user --> 
+  if (print_info) {
+    # print each of the objects generated in the above sections
+  }
+  
+  return(results)
+}
+
+#' Creates data frame template for summary statistics
+#' @param num_of_preds Total number of rows for which summary being made
+#' @param preds Vector of row names
+#' @return Empty data frame with named columns
+#' @keywords internal
+summary_template <- function(row_names, row_count) {
+  # create empty data.frame with one row per predictor for beta params
+  data.frame(
+    mean = numeric(row_count),
+    variance = numeric(row_count),
+    lower_ci_95 = numeric(row_count),
+    upper_ci_95 = numeric(row_count),
+    lower_ci_50 = numeric(row_count),
+    upper_ci_50 = numeric(row_count),
+    row.names = row_names,
+    stringsAsFactors = FALSE
+  )
+}
+
+
+#' Takes a numeric vector of draws for a parameter component (a real parameter 
+#' itself, or an element of a array parameter, etc.) and returns summary
+#' statistics as a vector of 
+#' 
+#' @v A numeric vector of draws. This is part of a parameter associated with a 
+#'    single response variable (plus a single predictor in case of betas)
+#' @return A vector of statistics formatted as
+#'        c(<mean>, <variance>, <lower 95>, <upper 95>, <lower 50>, <upper 50>)
+#'        where lower 95 is the lower bound of the 95% credible interval,
+#'        upper 50 is the upper bound of the 50% credible interval, etc.
+#' @keywords internal
+get_stats <- function(v) {
+  mean <- mean(v)
+  variance <- var(v)
+  q95 <- quantile(v, c(0.025, 0.975))
+  q50 <- quantile(v, c(0.25,  0.75))
+
+  c(mean, variance, q95[1], q95[2], q50[1], q50[2])
+}
