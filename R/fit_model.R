@@ -155,9 +155,6 @@ fit_model <-
   fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = burning_iterations, 
                   chains = chains, seed = seed, verbose = TRUE)
 
-  # Process results based on result_type
-  #result <- get_mixture_results(p_family, fit, result_type)
-  #return(result)
   process_results(p_family, fit, formulas)
 }
 

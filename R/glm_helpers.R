@@ -464,109 +464,23 @@ generate_stan <- function(components, formula, data, priors) {
   }
 }
 
-#' Process model results from fit object
-#'
-#' @param family Distribution family
-#' @param fit Stan fit object
-#' @param return_type 0 for matrix output, 1 for posterior samples
-#' @return Processed results
-#' @keywords internal
-get_mixture_results <- function(family, fit, return_type) {
-  posterior <- extract(fit)
-  z_samples <- posterior$z            # get z-samples from fit
-  beta1.p <- posterior$beta1_flat          # get beta1 from fit
-  beta2.p <- posterior$beta2_flat          # get bata2 from fit
-  
-  if (family == "gamma") {
-    phi1.p <- posterior$phi1
-    phi2.p <- posterior$phi2
-  } else {
-    phi1.p <- NULL
-    phi2.p <- NULL
-  }
-  
-  if (is.null(posterior$z) || is.null(posterior$beta1) || is.null(posterior$beta2)) {
-    stop("Error: Missing expected parameters in posterior", posterior$z, posterior$beta1, posterior$beta2, "end") #TODO fix this line
-  }
-  
-  # helper function for flipping z_samples and processing params
-  process_parameters <- function(z_samples, beta1.p, beta2.p, phi1.p = NULL, phi2.p = NULL) {
-    # Flip z_samples (0 -> 1, 1 -> 0)
-    for (i in seq_len(nrow(z_samples))) {
-      z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
-      if (mean(z_samples[i, ]) < 0.5) {
-        z_samples[i, ] <- 1 - z_samples[i, ]
-        temp <- beta1.p[i, ]
-        beta1.p[i, ] <- beta2.p[i, ]
-        beta2.p[i, ] <- temp
-        
-        if (!is.null(phi1.p) && !is.null(phi2.p)) {  # Check if family is gamma
-          temp_phi <- phi1.p[i]
-          phi1.p[i] <- phi2.p[i]
-          phi2.p[i] <- temp_phi
-        }
-      }
-    }
-    
-    # Calculate statistics
-    mean_beta1 <- apply(beta1.p, 2, mean)
-    mean_beta2 <- apply(beta2.p, 2, mean)
-    var_beta1 <- apply(beta1.p, 2, var)
-    var_beta2 <- apply(beta2.p, 2, var)
-    ci_beta1 <- apply(beta1.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
-    ci_beta2 <- apply(beta2.p, 2, function(x) quantile(x, probs = c(0.25, 0.95)))
-    
-    if (return_type == 0) {
-      print("Printing z_samples matrix:")
-      print(z_samples)  # Print the matrix z_samples
-    } else if (return_type == 1) {
-      print("Printing betas and related statistics:")
-      # Print each beta with a descriptive label
-      cat("Mean beta1: ", mean_beta1, "\n")
-      cat("Mean beta2: ", mean_beta2, "\n")
-      cat("Variance beta1: ", var_beta1, "\n")
-      cat("Variance beta2: ", var_beta2, "\n")
-      cat("95% CI beta1: ", ci_beta1, "\n")
-      cat("95% CI beta2: ", ci_beta2, "\n")
-    }
-    
-    return(list(
-      z_samples = z_samples,
-      mean_beta1 = mean_beta1,
-      mean_beta2 = mean_beta2,
-      var_beta1 = var_beta1,
-      var_beta2 = var_beta2,
-      ci_beta1 = ci_beta1,
-      ci_beta2 = ci_beta2
-    ))
-  }
-  # Call process_parameters helper function
-  result_list <- process_parameters(z_samples, beta1.p, beta2.p, phi1.p, phi2.p)
-  return(result_list)
-}
-
-# TODO finish function below and remove get_mixture_helpers. this is designed
-# as a successor/rewrite
-# TODO possibly add silent/print switch
-
 #' Process model results from fit object and generate summaries
 #'
 #' @param family Distribution family
 #' @param fit Stan fit object
 #' @param formulas List of formulas used on the stan model
+#' @param n number of observations in the input dataset
 #' @param assignment_mat Includes raw posterior latent assignment matrix if true
 #' @param membership_prob Includes posterior component membership probability of each row if true
 #' @param stats Includes parameter statistics if true
-#' @param print_info Prints results if true, otherwise returns as list of data frames only
 #' @return Processed results depending on return_type
 #' @keywords internal
-process_results <- function(family, fit, formulas,
+process_results <- function(family, fit, formulas, 
                             assignment_mat = FALSE, 
                             membership_prob = TRUE, 
-                            stats = TRUE,
-                            print_info = FALSE) {
+                            stats = TRUE) {
   # Verify sampler did not fail before processing
-  
+  # TODO---not sure how to do yet
   
   results <- list() # Holds all processed values
   
@@ -575,6 +489,13 @@ process_results <- function(family, fit, formulas,
   z_samples <- posterior$z
   beta1_flat <- posterior$beta1_flat
   beta2_flat <- posterior$beta2_flat
+  if (family == "gamma") {
+    phi1 <- posterior$phi1
+    phi2 <- posterior$phi2
+  } else {
+    phi1 <- NULL
+    phi2 <- NULL
+  }
   
   # Process formulas into usable format for summary generation
   processed_formulas <- setNames(
@@ -584,14 +505,6 @@ process_results <- function(family, fit, formulas,
     vapply(formulas, function(g) as.character(g[[2]]), "") # g pulls out all LHS vars (response vars)
   )
   
-  
-  # <-- Make raw posterior latent assignment matrix --> 
-  # TODO might not be needed
-  
-  # <-- Posterior component membership probability table -->
-  
-  
-  # <-- Parameter statistics tables -->
   # Process flat variables
   beta1_list <- list() # list index corresponds to response variable...
   beta2_list <- list() # ...w/ each element's col = predictor, row=iteration
@@ -606,9 +519,42 @@ process_results <- function(family, fit, formulas,
     pos <- pos + predictor_count
   }
   
-  # Process parameter statistics 
-  print(posterior$phi1) #TODO Remove
+  # Label switching (correcting switching of observations during sampling)
+  # TODO: polish this section for readability---left rough b/c it might change soon
+  #       its also not tested properly yet
+  for (i in seq_len(nrow(z_samples))) {
+    z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
+    if (mean(z_samples[i, ]) < 0.5) {
+      z_samples[i, ] <- 1 - z_samples[i, ]
+      
+      for (response_var in names(processed_formulas)) {
+        temp_beta <- beta1_list[[response_var]][i, ]
+        beta1_list[[response_var]][i, ] <- beta2_list[[response_var]][i, ]
+        beta2_list[[response_var]][i, ] <- temp_beta
+        if (!is.null(phi1) && !is.null(phi2)) {  # Check if family is gamma
+          # TODO: TEST GAMMA
+          j = which(names(processed_formulas) == response_var) # index assoc. with this response variable
+          temp_phi <- phi1[i][j]
+          phi1[i][j] <- phi2[i][j]
+          phi2[i][j] <- temp_phi
+        }
+      }
+    }
+  }
   
+  # <-- Posterior component membership probability table -->
+  
+  if (membership_prob) {
+    # Probabilities of membership in the more frequent cluster, i.e.
+    # component with the larger mixture weight. Same as probability of true link
+    # in data linkage application
+    component_membership_probabilities <- data.frame(
+      membership_probability = colMeans(z_samples)
+    )
+    results$component_membership_probabilities <- component_membership_probabilities
+  }
+  
+  # <-- Process parameter statistics -->
   param_stats <- list()
   for (response_var in names(processed_formulas)) {
     param_stats[[response_var]] = list()
@@ -616,7 +562,7 @@ process_results <- function(family, fit, formulas,
     # <- Process betas ->
     preds <- processed_formulas[[response_var]]
     num_of_preds <- length(preds)
-
+    
     # Make empty data frames to load
     comp1_beta_summary <- summary_template(preds, num_of_preds) 
     comp2_beta_summary <- summary_template(preds, num_of_preds)
@@ -634,34 +580,33 @@ process_results <- function(family, fit, formulas,
     param_stats[[response_var]][["component2_beta_summary"]] <- comp2_beta_summary
     
     # <- Process phis ->
-    if (family == "gamma") { # TODO: TEST. untested block until gamma model is fixed.
+    if (!is.null(phi1) && !is.null(phi2)) { # TODO: TEST GAMMA
       index = which(names(processed_formulas) == response_var)
       
       comp1_phi_summary <- summary_template("shape", 1)
-      comp1_phi_summary[1, ] <- get_stats(posterior$phi1[[index]]) 
+      comp1_phi_summary[1, ] <- get_stats(phi1[[index]]) 
       
       comp2_phi_summary <- summary_template("shape", 1)
-      comp2_phi_summary[1, ] <- get_stats(posterior$phi2[[index]]) 
+      comp2_phi_summary[1, ] <- get_stats(phi2[[index]]) 
       
       param_stats[[response_var]][["component1_phi_summary"]] <- comp1_phi_summary
       param_stats[[response_var]][["component2_phi_summary"]] <- comp2_phi_summary
     }
   }
-
+  
   
   if (stats) {
     results <- c(results, param_stats)
   }
   
-  # <-- Deliver to user --> 
-  if (print_info) {
-    # print each of the objects generated in the above sections
+  if (assignment_mat) {
+    results <- c(results, posterior$z) # TODO: currently unflipped
   }
   
   return(results)
 }
 
-#' Creates data frame template for summary statistics
+#' process_results helper that creates data frame template for summary statistics
 #' @param num_of_preds Total number of rows for which summary being made
 #' @param preds Vector of row names
 #' @return Empty data frame with named columns
@@ -681,9 +626,9 @@ summary_template <- function(row_names, row_count) {
 }
 
 
-#' Takes a numeric vector of draws for a parameter component (a real parameter 
-#' itself, or an element of a array parameter, etc.) and returns summary
-#' statistics as a vector of 
+#' process_results helper that takes a numeric vector of draws for a parameter 
+#' component (a real parameter itself, or an element of a array parameter, etc.)
+#' and returns summary statistics as a vector values 
 #' 
 #' @v A numeric vector of draws. This is part of a parameter associated with a 
 #'    single response variable (plus a single predictor in case of betas)
@@ -697,6 +642,6 @@ get_stats <- function(v) {
   variance <- var(v)
   q95 <- quantile(v, c(0.025, 0.975))
   q50 <- quantile(v, c(0.25,  0.75))
-
+  
   c(mean, variance, q95[1], q95[2], q50[1], q50[2])
 }
