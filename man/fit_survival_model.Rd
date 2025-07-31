@@ -8,6 +8,7 @@ fit_survival_model(
   formula,
   p_family,
   data,
+  priors = NULL,
   result_type,
   iterations,
   burning_iterations,
@@ -23,6 +24,10 @@ fit_survival_model(
 \item{p_family}{Distribution family ("weibull", "gamma")}
 
 \item{data}{Input data frame or "random" for synthetic data}
+
+\item{priors}{Named list (or NULL) of strings defining priors and optionally
+hyperparameter definitions used in the prior definition. NULL priors or missing
+list elements defining needed priors triggers weakly-informative defaults.}
 
 \item{result_type}{0 for matrix output, 1 for posterior samples,}
 
@@ -51,6 +56,14 @@ surv_fit <- LinksMixtureModeling::fit_survival_model(
 formula = Surv(y, status) ~ X2, 
 p_family = "weibull",
 data = "random",
+priors = list(beta1_sigma = cov_matrix, 
+              beta1_loc = c(7,8), 
+              beta1 = "multi_normal(beta1_loc, beta1_sigma)",
+              a_func = stan_func("real mu_prior_lpdf(real x) { return normal_lpdf(x | 0, 5); }"),
+              beta1 = "mu_prior()",
+              beta2_loc = 0,
+              beta2_scale = 6,
+              beta2 = "normal(beta2_loc, beta2_scale)"),
 result_type = 1,
 iterations = 500,
 burning_iterations = 250,

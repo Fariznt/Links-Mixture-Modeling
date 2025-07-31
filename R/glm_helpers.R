@@ -467,25 +467,14 @@ generate_stan <- function(components, formula, data, priors) {
 #' Process model results from fit object and generate summaries
 #'
 #' @param family Distribution family
-#' @param fit Stan fit object
+#' @param posterior Posterior extracted from fit object returned by stampler
 #' @param formulas List of formulas used on the stan model
-#' @param n number of observations in the input dataset
-#' @param assignment_mat Includes raw posterior latent assignment matrix if true
-#' @param membership_prob Includes posterior component membership probability of each row if true
-#' @param stats Includes parameter statistics if true
 #' @return Processed results depending on return_type
 #' @keywords internal
-process_results <- function(family, fit, formulas, 
-                            assignment_mat = FALSE, 
-                            membership_prob = TRUE, 
-                            stats = TRUE) {
-  # Verify sampler did not fail before processing
-  # TODO---not sure how to do yet
-  
+process_results <- function(family, posterior, formulas) {
   results <- list() # Holds all processed values
   
   # Extract results from fit
-  posterior <- extract(fit)
   z_samples <- posterior$z
   beta1_flat <- posterior$beta1_flat
   beta2_flat <- posterior$beta2_flat
@@ -496,6 +485,8 @@ process_results <- function(family, fit, formulas,
     phi1 <- NULL
     phi2 <- NULL
   }
+  
+  results$raw_z_samples <- z_samples
   
   # Process formulas into usable format for summary generation
   processed_formulas <- setNames(
@@ -520,8 +511,6 @@ process_results <- function(family, fit, formulas,
   }
   
   # Label switching (correcting switching of observations during sampling)
-  # TODO: polish this section for readability---left rough b/c it might change soon
-  #       its also not tested properly yet
   for (i in seq_len(nrow(z_samples))) {
     z_samples[i, ] <- ifelse(z_samples[i, ] == 1, 0, 1)
     if (mean(z_samples[i, ]) < 0.5) {
@@ -543,16 +532,15 @@ process_results <- function(family, fit, formulas,
   }
   
   # <-- Posterior component membership probability table -->
-  
-  if (membership_prob) {
-    # Probabilities of membership in the more frequent cluster, i.e.
-    # component with the larger mixture weight. Same as probability of true link
-    # in data linkage application
-    component_membership_probabilities <- data.frame(
-      membership_probability = colMeans(z_samples)
-    )
-    results$component_membership_probabilities <- component_membership_probabilities
-  }
+
+  # Probabilities of membership in the more frequent cluster, i.e.
+  # component with the larger mixture weight. Same as probability of true link
+  # in data linkage application
+  component_membership_probabilities <- data.frame(
+    membership_probability = colMeans(z_samples)
+  )
+  results$component_membership_probabilities <- component_membership_probabilities
+
   
   # <-- Process parameter statistics -->
   param_stats <- list()
@@ -593,15 +581,7 @@ process_results <- function(family, fit, formulas,
       param_stats[[response_var]][["component2_phi_summary"]] <- comp2_phi_summary
     }
   }
-  
-  
-  if (stats) {
-    results <- c(results, param_stats)
-  }
-  
-  if (assignment_mat) {
-    results <- c(results, posterior$z) # TODO: currently unflipped
-  }
+  results <- c(results, param_stats)
   
   return(results)
 }
@@ -630,7 +610,7 @@ summary_template <- function(row_names, row_count) {
 #' component (a real parameter itself, or an element of a array parameter, etc.)
 #' and returns summary statistics as a vector values 
 #' 
-#' @v A numeric vector of draws. This is part of a parameter associated with a 
+#' @param v A numeric vector of draws. This is part of a parameter associated with a 
 #'    single response variable (plus a single predictor in case of betas)
 #' @return A vector of statistics formatted as
 #'        c(<mean>, <variance>, <lower 95>, <upper 95>, <lower 50>, <upper 50>)
