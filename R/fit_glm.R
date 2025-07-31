@@ -3,11 +3,9 @@
 #' @param formula Model formula (e.g., y ~ x1 + x2)
 #' @param p_family Distribution family ("linear", "logistic", "poisson", "gamma")
 #' @param data Input data frame or "random" for synthetic data
-#' @param components Vector specifying mixture components (e.g., c("linear", "linear"))
 #' @param priors Named list (or NULL) of strings defining priors and optionally
 #' hyperparameter definitions used in the prior definition. NULL priors or missing
 #' list elements defining needed priors triggers weakly-informative defaults.
-#' @param result_type 0 for matrix output, 1 for posterior samples,
 #' @param iterations Total number of MCMC iterations, default is
 #' @param warmup_iterations Number of burn-in iterations
 #' @param chains Number of MCMC chains
@@ -24,7 +22,6 @@
 #'  formula             = y ~ X1 + X2,        # y, X1, X2 auto-generated
 #'  p_family            = "linear",
 #'  data                = "random",           # triggers built-in generator
-#'  components          = c("linear", "linear"),
 #'  priors              = list(beta1_sigma = cov_matrix, 
 #'                             beta1_loc = c(7,8), 
 #'                             beta1 = "multi_normal(beta1_loc, beta1_sigma)",
@@ -40,10 +37,9 @@
 #')
 #' }
 fit_glm <- 
-  function(formulas, 
+  function(formulas,
            p_family, 
            data, 
-           components, 
            priors = NULL,
            iterations = 10000, 
            warmup_iterations = 1000, 
@@ -94,7 +90,7 @@ fit_glm <-
   }
 
   # Generate stan file
-  stan_file <- generate_stan(components, formula, data, priors)
+  stan_file <- generate_stan(c(p_family, p_family), formula, data, priors)
 
   # Prepare the data~
   if (ncol(data) <= 1) {
@@ -170,7 +166,6 @@ fit_glm <-
 # fit_result <- fit_model(formula = formula,
                         # p_family = "linear",
                         # data = "random",
-                        # components = c("linear", "linear"),
                         # result_type = 1,
                         # iterations = 3000,
                         # warmup_iterations = 1000,
