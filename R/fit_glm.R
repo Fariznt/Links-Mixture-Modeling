@@ -17,7 +17,7 @@
 #' @importFrom utils read.csv
 #' @examples
 #' \dontrun{
-#' # Linear mixture example, assuming cov_matrix is a defined R matrix
+#' # Linear mixture example, assuming cov_matrix is a defined 2x2 R matrix
 #' lin_fit <- LinksMixtureModeling::fit_glm(
 #'  formula             = y ~ X1 + X2,        # y, X1, X2 auto-generated
 #'  p_family            = "linear",
@@ -29,9 +29,8 @@
 #'                             mu2_loc = 0,
 #'                             mu2_scale = 6,
 #'                             mu2 = "normal(mu2_loc, mu2_scale)"),
-#'  result_type         = 1,                  # post-processed summary
 #'  iterations          = 2000,               # 1000 warm-up + 1000 sampling
-#'  warmup_iterations  = 1000,
+#'  warmup_iterations   = 1000,
 #'  chains              = 2,
 #'  seed                = 123
 #')
@@ -44,7 +43,8 @@ fit_glm <-
            iterations = 10000, 
            warmup_iterations = 1000, 
            chains = 2, 
-           seed = 123) {
+           seed = 123,
+           testing = FALSE) {
 
   validate_args(priors, p_family)
     
@@ -66,9 +66,7 @@ fit_glm <-
   # Check what type of data should be loaded & handle NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
-    data <- generate_synthetic_mixture_data(p_family, seed)
-    print(head(data))  # first few rows of generated data
-    print(dim(data))   # dimensions of generated data
+    data <- generate_synthetic_glm_data(p_family, formulas, seed)$data
   } else if (is.character(data) && length(data) == 1) {
     # data is a fie path
     if (!file.exists(data)) {

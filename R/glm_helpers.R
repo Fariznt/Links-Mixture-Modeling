@@ -18,7 +18,7 @@ NULL
 #' @param seed Random seed
 #' @return A data frame with synthetic data
 #' @keywords internal
-generate_synthetic_mixture_data <- function(family, seed, priors) {
+generate_synthetic_mixture_data_old <- function(family, formulas, seed) {
   set.seed(seed)
   
   N <- 200
@@ -99,6 +99,147 @@ generate_synthetic_mixture_data <- function(family, seed, priors) {
   return(data.frame(X, y))
 }
 
+#' Creates synthetic data for testing mixture models with multiple formulas.
+#'
+#' @param family Distribution family ("linear", "logistic", "poisson", or "gamma")
+#' @param formulas List of model formulas (e.g., list(y1 ~ X1 + X2, y2 ~ X1 + X3))
+#' @param N The number observations to generate, default 200
+#' @param mix_prop Mixture proportion; the relative frequency of the more frequent component
+#' in the two-component mixture. In data linkage, the true link component proportion.
+#' @param seed Seed used to initialize pseudorandom number generators
+#' @param beta1 Value of all true coefficients of first component (default: 1)
+#' @param beta2 Value of all true coefficients of second component (default: 2)
+#' @param phi1 For gamma distribution, value of all true shapes of first component. (default: 5)
+#' @param phi2 For gamma distribution, value of all true shapes of second component. (default: 2)
+#' @details It's especially recommended to define beta1, beta2, phi1, and phi2 beyond
+#' default values when generating data for multiple formulas to mimic real-world
+#' heterogeneity of response variables.
+#' @return A list with:
+#'   - data: data frame of predictors and responses
+#'   - latent_values: list containing z and component parameters
+#' @keywords internal
+generate_synthetic_glm_data <- function(family, formulas, 
+                                            N = 200, 
+                                            mix_prop = 0.8, 
+                                            seed = NULL,
+                                            beta1 = NULL,
+                                            beta2 = NULL,
+                                            phi1 = NULL,
+                                            phi2 = NULL) {
+  # Argument validity checks
+  if (!is.null(beta1) && length(beta1) != length(formulas)) {
+    stop("beta1, if defined, must be a vector of the same length as formulas")
+  }
+  if (!is.null(beta2) && length(beta2) != length(formulas)) {
+    stop("beta2, if defined, must be a vector of the same length as formulas")
+  }
+  
+  if (!is.null(seed)) { # if no seed is passed, R will make one
+    set.seed(seed)
+  }
+  
+  # Correct if formulas is a single formula, not a list
+  if (!is.list(formulas)) {
+    formulas <- list(formulas)
+  }
+  
+  # pull out right-side of formulas as list of character vectors
+  all_rhs = lapply(formulas, function(f) all.vars(f[[3]])) 
+  # combine and save unique predictors
+  predictor_names <- unique(unlist(all_rhs)) 
+  
+  # Simulate predictors uniformly between -1 and 1
+  data <- as.data.frame(
+    lapply(predictor_names, function(var) runif(N, -1, 1))
+  )
+  names(data) <- predictor_names # assign col names
+  
+  # Latent mixture assignments (0 or 1)
+  z <- rbinom(N, 1, mix_prop)
+  
+  # Prepare expected results for output
+  latent_values <- list(
+    z = z, # vector of latent mixture membership
+    true_params = list() # list of true parameter values (coefficients, shapes) 
+  )
+
+  # Loop over each formula to generate responses
+  for (f in formulas) {
+    response_name <- as.character(f[[2]]) # LHS of formula
+    preds <- all.vars(f[[3]]) # RHS of formula as vector
+    
+    # Define true coefficients for this formula
+    i = which(formulas == f) # index of this formula
+    
+    # betas
+    if (is.null(beta1)) {
+      beta1.f <- rep(1, length(preds) + 1)
+    } else {
+      beta1.f <- rep(beta1[i], length(preds) + 1)
+    }
+    if (is.null(beta2)) {
+      beta2.f <- rep(2, length(preds) + 1)
+    } else {
+      beta2.f <- rep(beta2[i], length(preds) + 1)
+    }
+    
+    if (is.null(phi1)) {
+      phi1.f <- 5
+    } else {
+      phi1.f <- phi1[i]
+    }
+    if (is.null(phi2)) {
+      phi2.f <- 2
+    } else {
+      phi2.f <- phi2[i]
+    }
+    
+    # Build design matrix with intercept
+    X <- cbind(1, as.matrix(data[preds]))
+    y <- numeric(N)
+    
+    # Generate outcomes per observation
+    for (i in seq_len(N)) {
+      eta_raw <- sum(X[i, ] * if (z[i] == 0) beta1.f else beta2.f)
+      # clamp eta into [-10, 10] to keep mu and therefore rate positive finite
+      eta <- pmin(pmax(eta_raw, -10), 10)
+      
+      mu_raw   <- exp(eta)
+      # also clamp mu
+      mu <- pmin(pmax(mu_raw, 1e-6), 1e6)
+      
+      y[i] <- switch(
+        family,
+        linear   = rnorm(1, mean = eta, sd = 1),
+        logistic = rbinom(1, 1, prob = 1 / (1 + exp(-eta))), # TODO check
+        poisson  = rpois(1, lambda = exp(eta)), # TODO check
+        gamma    = rgamma( # TODO check
+          1,
+          shape = if (z[i] == 0) phi1.f else phi1.f,
+          rate  = if (z[i] == 0) phi1.f / mu else phi2.f / mu
+        ),
+        stop("Invalid family: ", family)
+      )
+    }
+    
+    # Append response to data
+    data[[response_name]] <- y
+    
+    # Record parameters used for this response
+    params <- list(beta1 = beta1.f, beta2 = beta2.f)
+    if (family == "gamma") {
+      params$phi1 <- phi1.f
+      params$phi2 <- phi2.f
+    }
+    latent_values$true_params[[response_name]] <- params
+  }
+  
+  # Return both simulated dataset and ground-truth info
+  return(list(
+    data = data,
+    latent_values = latent_values
+  ))
+}
 
 #' Generate stan code for mixture models
 #'
@@ -521,11 +662,10 @@ process_results <- function(family, posterior, formulas) {
         beta1_list[[response_var]][i, ] <- beta2_list[[response_var]][i, ]
         beta2_list[[response_var]][i, ] <- temp_beta
         if (!is.null(phi1) && !is.null(phi2)) {  # Check if family is gamma
-          # TODO: TEST GAMMA
           j = which(names(processed_formulas) == response_var) # index assoc. with this response variable
-          temp_phi <- phi1[i][j]
-          phi1[i][j] <- phi2[i][j]
-          phi2[i][j] <- temp_phi
+          temp_phi <- phi1[i,j]
+          phi1[i,j] <- phi2[i,j]
+          phi2[i,j] <- temp_phi
         }
       }
     }
@@ -568,7 +708,7 @@ process_results <- function(family, posterior, formulas) {
     param_stats[[response_var]][["component2_beta_summary"]] <- comp2_beta_summary
     
     # <- Process phis ->
-    if (!is.null(phi1) && !is.null(phi2)) { # TODO: TEST GAMMA
+    if (!is.null(phi1) && !is.null(phi2)) {
       index = which(names(processed_formulas) == response_var)
       
       comp1_phi_summary <- summary_template("shape", 1)
