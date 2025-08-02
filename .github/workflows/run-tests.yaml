@@ -33,9 +33,10 @@ jobs:
   
       - name: Install packages
         run: |
-          Rscript -e 'install.packages(c("remotes", "devtools"))' 
+          Rscript -e 'install.packages(c("remotes"))' 
           Rscript -e 'remotes::install_deps(dependencies = TRUE)'
           
       - name: Run test suite
-        run: Rscript -e 'devtools::test(args = "--parallel")'
+        run: |
+          Rscript -e 'testthat::test_local()'
         
