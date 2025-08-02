@@ -15,28 +15,28 @@ jobs:
         r-version: ["4.5"]
         os: [ ubuntu-latest ] # add macOS-latest, windows-latest for robustness at cost of time
 
-  steps:
-    - uses: actions/checkout@v4
-    
-    - uses: r-lib/actions/setup-r@v
-      with:
-        r-version: ${{ matrix.r-version }}
-        
-    - uses: actions/cache@v3
-      with:
-        path: ${{ env.HOME }}/.R/library
-        key: ${{ runner.os }}-R-${{ matrix.r-version }} # uniquely identifies this cache
-        
-    - name: Install system dependencies
-      if: runner.os == 'Linux'
-      run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev libcurl4-openssl-dev
-
-    - name: Install packages
-      # remotes package provides github-install helpers
-      # install_deps() pulls actual dependencies from DESCRIPTION file
-      run: |
-        Rscript -e 'install.packages("remotes"))' 
-        Rscript -e 'remotes::install_deps(dependencies = TRUE)']
-        
-    - name: Run test suite
-      run: Rscript -e 'devtools::test()'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r-version }}
+          
+      - uses: actions/cache@v3
+        with:
+          path: ${{ env.HOME }}/.R/library
+          key: ${{ runner.os }}-R-${{ matrix.r-version }} # uniquely identifies this cache
+          
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential libssl-dev libcurl4-openssl-dev
+  
+      - name: Install packages
+        # remotes package provides github-install helpers
+        # install_deps() pulls actual dependencies from DESCRIPTION file
+        run: |
+          Rscript -e 'install.packages("remotes")' 
+          Rscript -e 'remotes::install_deps(dependencies = TRUE)'
+          
+      - name: Run test suite
+        run: Rscript -e 'devtools::test()'
