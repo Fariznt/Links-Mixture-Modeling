@@ -10,6 +10,9 @@
 #' @param warmup_iterations Number of burn-in iterations
 #' @param chains Number of MCMC chains
 #' @param seed Random seed (integer or "random")
+#' @param diagnostics If TRUE, returns results in a list that also includes performance
+#' metrics and (when data == "random") the latent values used for data generation. 
+#' FALSE by default.
 #' @return Results depending on result_type
 #' @export
 #' @importFrom rstan stan_model sampling
@@ -44,7 +47,7 @@ fit_glm <-
            warmup_iterations = 1000, 
            chains = 2, 
            seed = 123,
-           testing = FALSE) {
+           diagnostics = FALSE) {
 
   validate_args(priors, p_family)
     
@@ -66,7 +69,8 @@ fit_glm <-
   # Check what type of data should be loaded & handle NA values
   if (identical(data, "random")) {
     print("Generating synthetic data...")
-    data <- generate_synthetic_glm_data(p_family, formulas, seed)$data
+    generated <- generate_synthetic_glm_data(p_family, formulas, seed)
+    data <- generated$data
   } else if (is.character(data) && length(data) == 1) {
     # data is a fie path
     if (!file.exists(data)) {
@@ -137,11 +141,17 @@ fit_glm <-
   )
 
   # Load the Stan model
-  stan_model <- rstan::stan_model(file = stan_file)
+  compile_time <- system.time({
+    stan_model <- rstan::stan_model(file = stan_file)
+  })["elapsed"]
+  
 
   # Fit the model using sampling
-  fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = warmup_iterations, 
-                  chains = chains, seed = seed, verbose = TRUE)
+  sampling_time <- system.time({
+    fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = warmup_iterations, 
+                    chains = chains, seed = seed, verbose = TRUE)
+  })["elapsed"]
+
   
   posterior <- extract(fit)
   
@@ -153,7 +163,21 @@ fit_glm <-
          " or due to crashing/termination during sampling.")
   }
 
-  process_results(p_family, posterior, formulas)
+  if (diagnostics) {
+    output <- list(
+      results = process_results(p_family, posterior, formulas),
+      compile_time = compile_time,
+      sampling_time = sampling_time
+    )
+    if (exists("generated", inherits = FALSE)) {
+      output$latent_values <- generated$latent_values
+      output$generated_data <- generated$data
+    }
+  } else {
+    output <- process_results(p_family, posterior, formulas)
+  }
+  
+  output
 }
 
 
