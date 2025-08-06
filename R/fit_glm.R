@@ -143,14 +143,14 @@ fit_glm <-
   # Load the Stan model
   compile_time <- system.time({
     stan_model <- rstan::stan_model(file = stan_file)
-  })["elapsed"]
+  })[["elapsed"]]
   
 
   # Fit the model using sampling
   sampling_time <- system.time({
     fit <- sampling(stan_model, data = stan_data, iter = iterations, warmup = warmup_iterations, 
                     chains = chains, seed = seed, verbose = TRUE)
-  })["elapsed"]
+  })[["elapsed"]]
 
   
   posterior <- extract(fit)

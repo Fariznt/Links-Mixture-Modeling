@@ -147,7 +147,8 @@ validate_args <- function(priors, p_family) {
   
   # priors list must be a named list or null (in which case all defaults are used)
   if (!is.list(priors) || is.null(names(priors))) {
-    stop("`priors` must be a named list of prior strings")
+    stop("`priors` must be a named list of prior strings. Yours is:\n",
+         priors)
   }
   
   for (elt in priors) {
