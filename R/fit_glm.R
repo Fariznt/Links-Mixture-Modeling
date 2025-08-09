@@ -10,7 +10,7 @@
 #' @param warmup_iterations Number of burn-in iterations
 #' @param chains Number of MCMC chains
 #' @param seed Random seed (integer or "random")
-#' @param diagnostics If TRUE, returns results in a list that also includes performance
+#' @param diagnostics If TRUE, includes in returned list of results performance
 #' metrics and (when data == "random") the latent values used for data generation. 
 #' FALSE by default.
 #' @return Results depending on result_type
@@ -46,7 +46,7 @@ fit_glm <-
            iterations = 10000, 
            warmup_iterations = 1000, 
            chains = 2, 
-           seed = 123,
+           seed = "random",
            diagnostics = FALSE) {
 
   validate_args(priors, p_family)
@@ -60,7 +60,7 @@ fit_glm <-
   }
 
   # Parse seed and generate random if "random" passed in
-  if (seed == "random") {
+  if (seed == "random" || NULL) {
     seed <- sample.int(1e6, 1)
   } else {
     seed <- as.integer(seed)

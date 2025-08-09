@@ -50,7 +50,7 @@ fit_survival_model <- function(formula,
                                iterations, 
                                burning_iterations, 
                                chains, 
-                               seed, 
+                               seed = "random", 
                                truncation = 0, 
                                status_column = NULL) {
   

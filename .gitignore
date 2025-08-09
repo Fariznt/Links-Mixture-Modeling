@@ -4,3 +4,6 @@
 .Ruserdata
 *.rds
 *.stan
+Rprof.out
+rprof.out
+.RDataTmp*
