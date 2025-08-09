@@ -2,7 +2,9 @@ Package: LinksMixtureModeling
 Title: Bayesian Mixture Models with Stan
 Version: 0.1.0
 Authors@R: 
-    person("Morgane", "Pizigo", , "morgane_pizigo@brown.com", role = c("aut", "cre"))
+    person("Morgane", "Pizigo", , "morgane_pizigo@brown.com", role = c("aut")),
+    person("Muhammad", "Imran", "Fariz", "fariz@brown.edu", role = c("aut", "cre")),
+    person("Zyad", "Shahrli", , "zyad_shahrli@brown.edu", role = c("aut"))
 Description: Implements Bayesian mixture models for linear, logistic,
     Poisson, gamma, and survival data using Stan.
 License: MIT + file LICENSE
